@@ -40,6 +40,8 @@ import GameLayout from '../layouts/GameLayout.astro';
   .egg.cracked .crack { opacity: 1; }
   .egg.cracked { animation: wobble .5s ease-in-out; }
   .egg.drop { animation: edrop .45s cubic-bezier(.3, 1.4, .5, 1); }
+  /* 「なにが でるかな？」を聞き終えて、割れるようになったたまご */
+  .egg.ready { animation: ready 1.6s ease-in-out infinite; }
   .egg .k {
     position: absolute;
     left: 0; right: 0; top: 46%; height: 42%;
@@ -65,6 +67,7 @@ import GameLayout from '../layouts/GameLayout.astro';
   .egg.open .k { opacity: 0; transition: opacity .2s; }
   .egg.open .pic { animation: hatch .55s cubic-bezier(.3, 1.6, .5, 1) forwards; }
   @keyframes wobble { 20% { transform: rotate(-9deg) } 45% { transform: rotate(8deg) } 70% { transform: rotate(-4deg) } }
+  @keyframes ready { 0%, 70%, 100% { transform: none } 78% { transform: rotate(-5deg) } 86% { transform: rotate(5deg) } 94% { transform: rotate(-2deg) } }
   @keyframes edrop { from { transform: translateY(-40cqh) scale(.6); opacity: 0 } to { transform: none; opacity: 1 } }
   @keyframes lid { to { transform: translate(-30%, -70%) rotate(-35deg); opacity: 0 } }
   @keyframes hatch { from { transform: translateY(40%) scale(0) } to { transform: translateY(-10%) scale(1) } }
@@ -166,7 +169,8 @@ import GameLayout from '../layouts/GameLayout.astro';
   const eggs: Egg[] = [];
   let got: number[] = [];
   let done = false;
-  // 読み上げ中は たまご と ずかん のタップを受け付けない。連打で声が途切れ途切れになるのを防ぐ
+  // 読み上げ中 (と、そのあとの少しの間) は たまご と ずかん のタップを受け付けない
+  // 連打で声が途切れ途切れになるのを防ぎ、割る → 出る のくり返しがガチャのように速くなりすぎないようにする
   // 読み上げごとに番号を振り、いま鳴っているものが終わったときだけ解除する
   let talking = 0;
   let talkSeq = 0;
@@ -190,17 +194,23 @@ import GameLayout from '../layouts/GameLayout.astro';
     egg.el.classList.add('drop');
   }
 
-  /** texts を読み上げ、終わるまでタップを止める。日本語の声がない端末では効果音を鳴らし、その間だけ止める */
-  function talk(texts: string[], fallback: () => void) {
+  const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+  /**
+   * texts を読み上げ、終わってさらに pause ミリ秒たつまでタップを止める。日本語の声がない端末では効果音を鳴らす
+   * 途中で「もういちど」されずに最後まで待てたら true で解決する
+   */
+  async function talk(texts: string[], fallback: () => void, pause = 0) {
     const id = (talking = ++talkSeq);
-    const unlock = () => {
-      if (talking === id) talking = 0;
-    };
-    if (canSpeak()) speakWait(...texts).then(unlock);
+    if (canSpeak()) await speakWait(...texts);
     else {
       fallback();
-      setTimeout(unlock, 400);
+      await wait(400);
     }
+    await wait(pause);
+    if (talking !== id) return false;
+    talking = 0;
+    return true;
   }
 
   /** 読み上げ中にタップされたら、受け付けていないことが分かるように小さく揺らすだけにする */
@@ -211,9 +221,9 @@ import GameLayout from '../layouts/GameLayout.astro';
     );
   }
 
-  function say(i: number, withKana: boolean) {
+  function say(i: number, withKana: boolean, pause = 0) {
     const [k, w] = KANA[i];
-    talk(withKana ? [k, w] : [w], () => chirp(400 + (i % 10) * 60));
+    return talk(withKana ? [k, w] : [w], () => chirp(400 + (i % 10) * 60), pause);
   }
 
   function tapEgg(egg: Egg) {
@@ -221,24 +231,28 @@ import GameLayout from '../layouts/GameLayout.astro';
     if (talking) return nudge(egg.el);
     const [k] = KANA[egg.i];
     if (egg.state === 'whole') {
-      // 1 回目: ぐらっと揺れてヒビが入る
+      // 1 回目: ぐらっと揺れてヒビが入る。何が出るか予想する間をとってから割れるようにする
       egg.state = 'cracked';
       egg.el.classList.remove('drop');
       egg.el.classList.add('cracked');
       tone(330, 0, 0.08, 0.2, 'triangle');
       tone(440, 0.1, 0.08, 0.2, 'triangle');
-      talk([k], () => chirp(300 + (egg.i % 10) * 40));
+      talk([k, '何が 出るかな？'], () => chirp(300 + (egg.i % 10) * 40), 1000).then((ok) => {
+        if (ok) egg.el.classList.add('ready');
+      });
       return;
     }
-    // 2 回目: パカッと割れて出てくる
+    // 2 回目: パカッと割れて出てくる。読み上げを聞いて絵を見ている間は、ほかのたまごも割れない
     if (got.length >= GOAL) return;
     egg.state = 'open';
     const slot = got.length;
     got.push(egg.i);
+    egg.el.classList.remove('ready');
     egg.el.classList.add('open');
     chirp(500 + (slot % 8) * 80);
-    say(egg.i, true);
-    setTimeout(() => collect(egg, slot), 1400);
+    say(egg.i, true, 800).then((ok) => {
+      if (ok) collect(egg, slot);
+    });
   }
 
   /** 出てきた絵をずかんへ飛ばし、あいた所に新しいたまごを置く */
