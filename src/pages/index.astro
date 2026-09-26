@@ -3,7 +3,7 @@ import GameLayout from '../layouts/GameLayout.astro';
 import { games } from '../games';
 import { href } from '../lib/url';
 ---
-<GameLayout title="こどもの待ち時間ゲーム" back={false}>
+<GameLayout title="こどもの待ち時間ゲーム" back={false} scroll>
   <h1>まちじかん ゲーム</h1>
   <ul class="list">
     {games.map((g) => (

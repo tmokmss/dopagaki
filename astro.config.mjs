@@ -9,4 +9,6 @@ export default defineConfig({
   trailingSlash: 'always',
   // ホーム画面に追加して、オフラインでも遊べるようにする
   integrations: [serviceWorker()],
+  // 画面下に出る開発用ツールバーは、ローカルで子どもが遊ぶときの誤タップのもとになるので出さない
+  devToolbar: { enabled: false },
 });
