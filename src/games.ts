@@ -26,4 +26,11 @@ export const games: Game[] = [
     icon: '🍔',
     place: 'ハンバーガー屋',
   },
+  {
+    slug: 'hiragana',
+    title: 'あいうえお ぱっ',
+    description: 'ひらがなをタップすると読み上げて、その字ではじまる絵が出てくる',
+    icon: 'あ',
+    place: 'どこでも',
+  },
 ];

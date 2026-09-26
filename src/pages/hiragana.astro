@@ -1,0 +1,151 @@
+---
+import GameLayout from '../layouts/GameLayout.astro';
+---
+<GameLayout title="あいうえお ぱっ">
+  <div class="hud">
+    <span>よんだ: <span id="cnt">0</span> もじ</span>
+    <button id="mode" style="font-size:16px;font-weight:400">じゅんばん</button>
+  </div>
+  <button id="card" aria-label="つぎのもじ">
+    <span id="kana">あ</span>
+  </button>
+  <button id="pic" aria-label="もういちど">
+    <span id="emoji">？</span>
+    <span id="word"></span>
+  </button>
+</GameLayout>
+
+<style is:global>
+  #card {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 260px;
+    border: 0;
+    border-radius: 24px;
+    background: var(--row, #E24B4A);
+    color: #fff;
+  }
+  #kana {
+    font-family: "Hiragino Maru Gothic ProN", "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif;
+    font-size: 180px;
+    line-height: 1;
+    font-weight: 700;
+    text-shadow: 0 4px 0 rgba(0, 0, 0, .15);
+  }
+  #card.drop #kana { animation: kdrop .35s ease-out; }
+  @keyframes kdrop { from { transform: translateY(-60px) scale(.6); opacity: .2 } to { transform: none; opacity: 1 } }
+  #pic {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    width: 100%;
+    height: 130px;
+    margin-top: 14px;
+    border: 0;
+    border-radius: 24px;
+    background: var(--surface-1);
+  }
+  #emoji {
+    font-family: "Apple Color Emoji", "Noto Color Emoji", "Segoe UI Emoji", sans-serif;
+    font-size: 80px;
+    line-height: 1;
+  }
+  #word {
+    font-family: "Hiragino Maru Gothic ProN", "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif;
+    font-size: 36px;
+    font-weight: 700;
+  }
+  #word b { color: var(--row, #E24B4A); }
+  #pic.pop #emoji { animation: epop .45s cubic-bezier(.3, 1.6, .5, 1); }
+  @keyframes epop { from { transform: scale(0) rotate(-20deg) } to { transform: none } }
+  #pic.hidden #emoji { opacity: .35; }
+</style>
+
+<script>
+  import { chirp } from '../lib/audio';
+  import { speak } from '../lib/speech';
+
+  // [もじ, ことば, えもじ]  ことばの中の「もじ」を色付けする
+  const KANA: [string, string, string][] = [
+    ['あ', 'あり', '🐜'], ['い', 'いぬ', '🐕'], ['う', 'うさぎ', '🐇'], ['え', 'えんぴつ', '✏️'], ['お', 'おにぎり', '🍙'],
+    ['か', 'かに', '🦀'], ['き', 'きりん', '🦒'], ['く', 'くま', '🐻'], ['け', 'けーき', '🍰'], ['こ', 'こあら', '🐨'],
+    ['さ', 'さかな', '🐟'], ['し', 'しか', '🦌'], ['す', 'すいか', '🍉'], ['せ', 'せっけん', '🧼'], ['そ', 'そふとくりーむ', '🍦'],
+    ['た', 'たまご', '🥚'], ['ち', 'ちょうちょ', '🦋'], ['つ', 'つき', '🌙'], ['て', 'てんとうむし', '🐞'], ['と', 'とまと', '🍅'],
+    ['な', 'なす', '🍆'], ['に', 'にんじん', '🥕'], ['ぬ', 'ぬいぐるみ', '🧸'], ['ね', 'ねこ', '🐈'], ['の', 'のりもの', '🚃'],
+    ['は', 'はな', '🌷'], ['ひ', 'ひよこ', '🐤'], ['ふ', 'ふね', '🚢'], ['へ', 'へび', '🐍'], ['ほ', 'ほし', '⭐'],
+    ['ま', 'まいく', '🎤'], ['み', 'みかん', '🍊'], ['む', 'むし', '🐛'], ['め', 'めがね', '👓'], ['も', 'もも', '🍑'],
+    ['や', 'やま', '⛰️'], ['ゆ', 'ゆきだるま', '⛄'], ['よ', 'よっと', '⛵'],
+    ['ら', 'らいおん', '🦁'], ['り', 'りんご', '🍎'], ['る', 'るーぺ', '🔍'], ['れ', 'れもん', '🍋'], ['ろ', 'ろけっと', '🚀'],
+    ['わ', 'わに', '🐊'], ['を', 'ほんを よむ', '📖'], ['ん', 'ぱん', '🍞'],
+  ];
+  // 行ごとの色 (あ行, か行, ... わ行)
+  const ROW_COLORS = ['#E24B4A', '#EF9F27', '#639922', '#378ADD', '#D4537E', '#7F5BC7', '#1D9E8F', '#D85A30', '#3B6D11', '#185FA5'];
+  const rowOf = (i: number) => (i < 35 ? Math.floor(i / 5) : i < 38 ? 7 : i < 43 ? 8 : 9);
+
+  const card = document.getElementById('card')!;
+  const kanaEl = document.getElementById('kana')!;
+  const pic = document.getElementById('pic')!;
+  const emojiEl = document.getElementById('emoji')!;
+  const wordEl = document.getElementById('word')!;
+  const cntEl = document.getElementById('cnt')!;
+  const modeBtn = document.getElementById('mode')!;
+
+  let i = 0, shown = false, count = 0, random = false;
+
+  function render() {
+    shown = false;
+    document.body.style.setProperty('--row', ROW_COLORS[rowOf(i)]);
+    kanaEl.textContent = KANA[i][0];
+    emojiEl.textContent = '？';
+    wordEl.textContent = '';
+    pic.classList.add('hidden');
+    card.classList.remove('drop');
+    void card.offsetWidth;
+    card.classList.add('drop');
+  }
+
+  function say() {
+    const [k, w] = KANA[i];
+    // 日本語の声がない端末では効果音だけ鳴らす
+    if (!speak(k, w)) chirp(400 + (i % 10) * 60);
+  }
+
+  function reveal() {
+    const [k, w, e] = KANA[i];
+    shown = true;
+    emojiEl.textContent = e;
+    wordEl.innerHTML = w.replace(k, `<b>${k}</b>`);
+    pic.classList.remove('hidden', 'pop');
+    void pic.offsetWidth;
+    pic.classList.add('pop');
+    count++;
+    cntEl.textContent = String(count);
+    say();
+  }
+
+  function next() {
+    if (random) {
+      let j;
+      do j = Math.floor(Math.random() * KANA.length); while (j === i);
+      i = j;
+    } else i = (i + 1) % KANA.length;
+    render();
+  }
+
+  // 1回目のタップは今のもじを読む。以降はタップごとに次のもじへ進んで読む
+  card.addEventListener('click', () => {
+    if (shown) next();
+    reveal();
+  });
+  // 絵をタップするともういちど読む
+  pic.addEventListener('click', () => (shown ? say() : reveal()));
+  modeBtn.addEventListener('click', () => {
+    random = !random;
+    modeBtn.textContent = random ? 'ばらばら' : 'じゅんばん';
+  });
+
+  render();
+</script>
