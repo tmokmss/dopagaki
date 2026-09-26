@@ -53,7 +53,10 @@ ${SW_BODY}`;
 
 const SW_BODY = `
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(URLS)).then(() => self.skipWaiting()));
+  // GitHub Pages は max-age=600 を返すので、HTTP キャッシュを通すとデプロイ直後に古い版を詰めてしまう。
+  // そうなると sw.js は新しいまま古い中身を返し続け、次のデプロイまで直らない
+  const reqs = URLS.map((u) => new Request(u, { cache: 'reload' }));
+  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(reqs)).then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', (e) => {
@@ -65,7 +68,7 @@ self.addEventListener('activate', (e) => {
 });
 
 // お店の電波が弱くてもすぐ開けるよう、キャッシュ優先で返す。
-// 新しい版は次回起動時に sw.js の更新で入れ替わる。
+// 新しい版は sw.js の更新で入れ替わり、ページ側 (GameLayout) がリロードして反映する。
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET' || new URL(e.request.url).origin !== location.origin) return;
   e.respondWith(

@@ -31,7 +31,17 @@ const { title, back = true, scroll = false } = Astro.props;
     <title>{title}</title>
     {import.meta.env.PROD && (
       <script is:inline define:vars={{ sw: href('sw.js'), scope: href() }}>
-        if ('serviceWorker' in navigator) navigator.serviceWorker.register(sw, { scope });
+        if ('serviceWorker' in navigator) {
+          // キャッシュ優先なので、新しい版が入ってもこのページは古いまま表示されている。
+          // まだ触っていなければすぐリロードして新しい版にする。遊んでいる途中なら中断させず、次のページ遷移で切り替わる
+          const hadController = !!navigator.serviceWorker.controller;
+          let touched = false;
+          addEventListener('pointerdown', () => { touched = true; }, { once: true, capture: true });
+          navigator.serviceWorker.addEventListener('controllerchange', () => {
+            if (hadController && !touched) location.reload();
+          });
+          navigator.serviceWorker.register(sw, { scope });
+        }
       </script>
     )}
   </head>
