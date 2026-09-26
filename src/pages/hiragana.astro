@@ -114,7 +114,7 @@ import GameLayout from '../layouts/GameLayout.astro';
 
 <script>
   import { chirp, tone } from '../lib/audio';
-  import { speak } from '../lib/speech';
+  import { canSpeak, speak, speakWait } from '../lib/speech';
   import { onTap } from '../lib/tap';
 
   // [もじ, ことば, えもじ]  「を」「ん」ではじまることばはないので入れない
@@ -164,6 +164,10 @@ import GameLayout from '../layouts/GameLayout.astro';
   const eggs: Egg[] = [];
   let got: number[] = [];
   let done = false;
+  // 読み上げ中は たまご と ずかん のタップを受け付けない。連打で声が途切れ途切れになるのを防ぐ
+  // 読み上げごとに番号を振り、いま鳴っているものが終わったときだけ解除する
+  let talking = 0;
+  let talkSeq = 0;
 
   /** 見えているたまごとずかんに無いもじを選ぶ */
   function pickKana() {
@@ -184,14 +188,26 @@ import GameLayout from '../layouts/GameLayout.astro';
     egg.el.classList.add('drop');
   }
 
+  /** texts を読み上げ、終わるまでタップを止める。日本語の声がない端末では効果音を鳴らし、その間だけ止める */
+  function talk(texts: string[], fallback: () => void) {
+    const id = (talking = ++talkSeq);
+    const unlock = () => {
+      if (talking === id) talking = 0;
+    };
+    if (canSpeak()) speakWait(...texts).then(unlock);
+    else {
+      fallback();
+      setTimeout(unlock, 400);
+    }
+  }
+
   function say(i: number, withKana: boolean) {
     const [k, w] = KANA[i];
-    // 日本語の声がない端末では効果音だけ鳴らす
-    if (!(withKana ? speak(k, w) : speak(w))) chirp(400 + (i % 10) * 60);
+    talk(withKana ? [k, w] : [w], () => chirp(400 + (i % 10) * 60));
   }
 
   function tapEgg(egg: Egg) {
-    if (done || egg.state === 'open') return;
+    if (done || talking || egg.state === 'open') return;
     const [k] = KANA[egg.i];
     if (egg.state === 'whole') {
       // 1 回目: ぐらっと揺れてヒビが入る
@@ -200,7 +216,7 @@ import GameLayout from '../layouts/GameLayout.astro';
       egg.el.classList.add('cracked');
       tone(330, 0, 0.08, 0.2, 'triangle');
       tone(440, 0.1, 0.08, 0.2, 'triangle');
-      if (!speak(k)) chirp(300 + (egg.i % 10) * 40);
+      talk([k], () => chirp(300 + (egg.i % 10) * 40));
       return;
     }
     // 2 回目: パカッと割れて出てくる
@@ -259,6 +275,7 @@ import GameLayout from '../layouts/GameLayout.astro';
   function reset() {
     if (done && full.hidden) return; // finish 待ちの間は無視する
     done = false;
+    talking = 0;
     got = [];
     cntEl.textContent = '0';
     full.hidden = true;
@@ -283,7 +300,7 @@ import GameLayout from '../layouts/GameLayout.astro';
   // ずかんのマスをタップすると、もういちど読む
   onTap(book, (_, e) => {
     const s = (e.target as Element).closest<HTMLElement>('.slot.got');
-    if (!s) return;
+    if (!s || talking) return;
     say(Number(s.dataset.i), false);
     s.classList.remove('pop');
     void s.offsetWidth;
