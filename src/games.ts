@@ -28,9 +28,9 @@ export const games: Game[] = [
   },
   {
     slug: 'hiragana',
-    title: 'あいうえお ぱっ',
-    description: 'ひらがなをタップすると読み上げて、その字ではじまる絵が出てくる',
-    icon: 'あ',
+    title: 'もじの たまご',
+    description: 'ひらがなの書かれたたまごをタップして割ると、その字ではじまるものが出てきてずかんに入る。10 こ集めたらおしまい',
+    icon: '🥚',
     place: 'どこでも',
   },
   {

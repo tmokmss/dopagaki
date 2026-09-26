@@ -1,154 +1,295 @@
 ---
 import GameLayout from '../layouts/GameLayout.astro';
 ---
-<GameLayout title="あいうえお ぱっ">
+<GameLayout title="もじの たまご">
   <div class="hud">
-    <span>よんだ: <span id="cnt">0</span> もじ</span>
-    <button id="mode" style="font-size:16px;font-weight:400">じゅんばん</button>
+    <span>ずかん: <span id="cnt">0</span> / <span id="goal"></span></span>
+    <button id="rst" style="font-size:16px;font-weight:400">もういちど</button>
   </div>
-  <button id="card" class="grow" aria-label="もじ">
-    <span id="kana">あ</span>
-  </button>
-  <button id="pic" aria-label="もういちど">
-    <span id="emoji">？</span>
-    <span id="word"></span>
-  </button>
+  <div id="nest" class="grow">
+    <div id="full" hidden>
+      <div class="emo">🎉</div>
+      <h2>ずかん いっぱい！</h2>
+      <button id="again">もういっかい</button>
+    </div>
+  </div>
+  <div id="book"></div>
 </GameLayout>
 
 <style is:global>
-  #card {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 100%;
-    border: 0;
-    border-radius: 24px;
-    background: var(--row, #E24B4A);
-    color: #fff;
+  /* たまごを 2×2 に並べる。大きさは #nest に合わせる */
+  #nest {
+    position: relative;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr 1fr;
+    place-items: center;
     container-type: size;
   }
-  #kana {
-    font-family: "Hiragino Maru Gothic ProN", "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif;
-    /* カードの大きさに合わせる */
-    font-size: min(240px, 65cqh, 70cqw);
-    line-height: 1;
-    font-weight: 700;
-    text-shadow: 0 4px 0 rgba(0, 0, 0, .15);
+  .egg {
+    position: relative;
+    /* たまごの縦横比 100:128 */
+    width: min(42cqw, 45cqh * 100 / 128);
+    aspect-ratio: 100 / 128;
+    container-type: inline-size;
+    cursor: pointer;
   }
-  #card.drop #kana { animation: kdrop .35s ease-out; }
-  @keyframes kdrop { from { transform: translateY(-60px) scale(.6); opacity: .2 } to { transform: none; opacity: 1 } }
-  #pic {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 16px;
-    width: 100%;
-    height: 130px;
-    margin-top: 14px;
-    border: 0;
-    border-radius: 24px;
+  .egg svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+  .egg .top, .egg .bottom { transform-box: fill-box; }
+  .egg .crack { opacity: 0; }
+  .egg.cracked .crack { opacity: 1; }
+  .egg.cracked { animation: wobble .5s ease-in-out; }
+  .egg.drop { animation: edrop .45s cubic-bezier(.3, 1.4, .5, 1); }
+  .egg .k {
+    position: absolute;
+    left: 0; right: 0; top: 46%; height: 42%;
+    display: flex; align-items: center; justify-content: center;
+    font-family: "Hiragino Maru Gothic ProN", "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif;
+    font-size: 50cqw;
+    font-weight: 700;
+    line-height: 1;
+    color: var(--c);
+    pointer-events: none;
+  }
+  .egg .pic {
+    position: absolute;
+    left: 0; right: 0; top: 4%;
+    text-align: center;
+    font-family: "Apple Color Emoji", "Noto Color Emoji", "Segoe UI Emoji", sans-serif;
+    font-size: 62cqw;
+    line-height: 1;
+    transform: scale(0);
+    pointer-events: none;
+  }
+  .egg.open .top { animation: lid .5s ease-out forwards; }
+  .egg.open .k { opacity: 0; transition: opacity .2s; }
+  .egg.open .pic { animation: hatch .55s cubic-bezier(.3, 1.6, .5, 1) forwards; }
+  @keyframes wobble { 20% { transform: rotate(-9deg) } 45% { transform: rotate(8deg) } 70% { transform: rotate(-4deg) } }
+  @keyframes edrop { from { transform: translateY(-40cqh) scale(.6); opacity: 0 } to { transform: none; opacity: 1 } }
+  @keyframes lid { to { transform: translate(-30%, -70%) rotate(-35deg); opacity: 0 } }
+  @keyframes hatch { from { transform: translateY(40%) scale(0) } to { transform: translateY(-10%) scale(1) } }
+
+  /* ずかん: 5 × 2 マス */
+  #book {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 6px;
+    margin-top: 12px;
+    padding: 8px;
+    border-radius: 16px;
     background: var(--surface-1);
   }
-  #emoji {
+  #book .slot {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    height: 58px;
+    border: 2px dashed var(--border-strong);
+    border-radius: 12px;
+    cursor: pointer;
+  }
+  #book .slot.got { border: 0; background: var(--surface-0); }
+  #book .slot.got.pop { animation: spop .4s cubic-bezier(.3, 1.6, .5, 1); }
+  #book .slot .e { font-family: "Apple Color Emoji", "Noto Color Emoji", "Segoe UI Emoji", sans-serif; font-size: 30px; line-height: 1; }
+  #book .slot .s { font-family: "Hiragino Maru Gothic ProN", "Hiragino Sans", system-ui, sans-serif; font-size: 13px; font-weight: 700; line-height: 1.2; }
+  #book.done .slot { animation: fjump .5s ease-out 2; }
+  #book.done .slot:nth-child(even) { animation-delay: .1s; }
+  @keyframes spop { from { transform: scale(.3) } to { transform: none } }
+  @keyframes fjump { 50% { transform: translateY(-8px) } }
+
+  .fly {
+    position: fixed;
+    z-index: 5;
     font-family: "Apple Color Emoji", "Noto Color Emoji", "Segoe UI Emoji", sans-serif;
-    font-size: 80px;
     line-height: 1;
+    pointer-events: none;
   }
-  #word {
-    font-family: "Hiragino Maru Gothic ProN", "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif;
-    font-size: 36px;
-    font-weight: 700;
-  }
-  #word b { color: var(--row, #E24B4A); }
-  #pic.pop #emoji { animation: epop .45s cubic-bezier(.3, 1.6, .5, 1); }
-  @keyframes epop { from { transform: scale(0) rotate(-20deg) } to { transform: none } }
-  #pic.hidden #emoji { opacity: .35; }
+
+  /* GOAL こ集めたらおしまい */
+  #full { position: absolute; inset: 0; z-index: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; border-radius: 16px; background: var(--surface-1); animation: fpop .5s cubic-bezier(.3, 1.6, .5, 1); }
+  #full[hidden] { display: none; }
+  #full .emo { font-family: "Apple Color Emoji", "Noto Color Emoji", "Segoe UI Emoji", sans-serif; font-size: min(96px, 30cqh); line-height: 1; }
+  #full h2 { margin: 0; font-family: "Hiragino Maru Gothic ProN", "Hiragino Sans", system-ui, sans-serif; font-size: 28px; }
+  #full button { background: #E24B4A; color: #fff; font-size: 22px; padding: 10px 32px; border-radius: 999px; }
+  @keyframes fpop { from { transform: scale(.4); opacity: 0; } to { transform: none; opacity: 1; } }
 </style>
 
 <script>
-  import { chirp } from '../lib/audio';
+  import { chirp, tone } from '../lib/audio';
   import { speak } from '../lib/speech';
   import { onTap } from '../lib/tap';
 
-  // [もじ, ことば, えもじ]  ことばの中の「もじ」を色付けする
+  // [もじ, ことば, えもじ]  「を」「ん」ではじまることばはないので入れない
   const KANA: [string, string, string][] = [
     ['あ', 'あり', '🐜'], ['い', 'いぬ', '🐕'], ['う', 'うさぎ', '🐇'], ['え', 'えんぴつ', '✏️'], ['お', 'おにぎり', '🍙'],
     ['か', 'かに', '🦀'], ['き', 'きりん', '🦒'], ['く', 'くま', '🐻'], ['け', 'けーき', '🍰'], ['こ', 'こあら', '🐨'],
     ['さ', 'さかな', '🐟'], ['し', 'しか', '🦌'], ['す', 'すいか', '🍉'], ['せ', 'せっけん', '🧼'], ['そ', 'そふとくりーむ', '🍦'],
     ['た', 'たまご', '🥚'], ['ち', 'ちょうちょ', '🦋'], ['つ', 'つき', '🌙'], ['て', 'てんとうむし', '🐞'], ['と', 'とまと', '🍅'],
-    ['な', 'なす', '🍆'], ['に', 'にんじん', '🥕'], ['ぬ', 'ぬいぐるみ', '🧸'], ['ね', 'ねこ', '🐈'], ['の', 'のりもの', '🚃'],
+    ['な', 'なす', '🍆'], ['に', 'にんじん', '🥕'], ['ぬ', 'ぬいぐるみ', '🧸'], ['ね', 'ねこ', '🐈'], ['の', 'のこぎり', '🪚'],
     ['は', 'はな', '🌷'], ['ひ', 'ひよこ', '🐤'], ['ふ', 'ふね', '🚢'], ['へ', 'へび', '🐍'], ['ほ', 'ほし', '⭐'],
     ['ま', 'まいく', '🎤'], ['み', 'みかん', '🍊'], ['む', 'むし', '🐛'], ['め', 'めがね', '👓'], ['も', 'もも', '🍑'],
     ['や', 'やま', '⛰️'], ['ゆ', 'ゆきだるま', '⛄'], ['よ', 'よっと', '⛵'],
     ['ら', 'らいおん', '🦁'], ['り', 'りんご', '🍎'], ['る', 'るーぺ', '🔍'], ['れ', 'れもん', '🍋'], ['ろ', 'ろけっと', '🚀'],
-    ['わ', 'わに', '🐊'], ['を', 'ほんを よむ', '📖'], ['ん', 'ぱん', '🍞'],
+    ['わ', 'わに', '🐊'],
   ];
   // 行ごとの色 (あ行, か行, ... わ行)
   const ROW_COLORS = ['#E24B4A', '#EF9F27', '#639922', '#378ADD', '#D4537E', '#7F5BC7', '#1D9E8F', '#D85A30', '#3B6D11', '#185FA5'];
   const rowOf = (i: number) => (i < 35 ? Math.floor(i / 5) : i < 38 ? 7 : i < 43 ? 8 : 9);
+  // 3 歳が数えきれて、待ち時間に収まる数
+  const GOAL = 10;
+  const EGGS = 4;
 
-  const card = document.getElementById('card')!;
-  const kanaEl = document.getElementById('kana')!;
-  const pic = document.getElementById('pic')!;
-  const emojiEl = document.getElementById('emoji')!;
-  const wordEl = document.getElementById('word')!;
+  const nest = document.getElementById('nest')!;
+  const book = document.getElementById('book')!;
+  const full = document.getElementById('full')!;
   const cntEl = document.getElementById('cnt')!;
-  const modeBtn = document.getElementById('mode')!;
+  document.getElementById('goal')!.textContent = String(GOAL);
 
-  let i = 0, shown = false, count = 0, random = false;
+  // たまごの絵。ヒビの線で上下に分け、割れたら上だけ飛ばす
+  const EGG = 'M50 4 C78 4 96 50 96 80 C96 108 76 124 50 124 C24 124 4 108 4 80 C4 50 22 4 50 4Z';
+  const ZIG = '4,50 16,42 28,54 40,42 52,54 64,42 76,54 88,42 96,50';
+  const eggSvg = (c: string, id: number) => `<svg viewBox="0 0 100 128">
+    <defs>
+      <clipPath id="t${id}"><polygon points="0,0 100,0 100,50 ${ZIG.split(' ').reverse().join(' ')} 0,50"/></clipPath>
+      <clipPath id="e${id}"><path d="${EGG}"/></clipPath>
+      <clipPath id="b${id}"><polygon points="0,128 100,128 100,50 ${ZIG.split(' ').reverse().join(' ')} 0,50"/></clipPath>
+    </defs>
+    <g class="bottom" clip-path="url(#b${id})"><path d="${EGG}" fill="#FFF8EC" stroke="${c}" stroke-width="3"/></g>
+    <g class="top" clip-path="url(#t${id})">
+      <path d="${EGG}" fill="#FFF8EC" stroke="${c}" stroke-width="3"/>
+      <circle cx="32" cy="26" r="6" fill="${c}" opacity=".35"/><circle cx="62" cy="18" r="4" fill="${c}" opacity=".35"/><circle cx="70" cy="36" r="5" fill="${c}" opacity=".35"/>
+    </g>
+    <polyline class="crack" clip-path="url(#e${id})" points="${ZIG}" fill="none" stroke="#5F5E5A" stroke-width="3" stroke-linejoin="round"/>
+  </svg>`;
 
-  function render() {
-    shown = false;
-    document.body.style.setProperty('--row', ROW_COLORS[rowOf(i)]);
-    kanaEl.textContent = KANA[i][0];
-    emojiEl.textContent = '？';
-    wordEl.textContent = '';
-    pic.classList.add('hidden');
-    card.classList.remove('drop');
-    void card.offsetWidth;
-    card.classList.add('drop');
+  interface Egg { el: HTMLDivElement; id: number; i: number; state: 'whole' | 'cracked' | 'open' }
+  const eggs: Egg[] = [];
+  let got: number[] = [];
+  let done = false;
+
+  /** 見えているたまごとずかんに無いもじを選ぶ */
+  function pickKana() {
+    const used = new Set([...eggs.map((e) => e.i), ...got]);
+    const free = KANA.map((_, i) => i).filter((i) => !used.has(i));
+    return free[Math.floor(Math.random() * free.length)];
   }
 
-  function say() {
-    const w = KANA[i][1];
+  function setEgg(egg: Egg) {
+    egg.i = pickKana();
+    egg.state = 'whole';
+    const c = ROW_COLORS[rowOf(egg.i)];
+    const [k, , e] = KANA[egg.i];
+    egg.el.style.setProperty('--c', c);
+    egg.el.className = 'egg';
+    egg.el.innerHTML = `${eggSvg(c, egg.id)}<span class="k">${k}</span><span class="pic">${e}</span>`;
+    void egg.el.offsetWidth;
+    egg.el.classList.add('drop');
+  }
+
+  function say(i: number, withKana: boolean) {
+    const [k, w] = KANA[i];
     // 日本語の声がない端末では効果音だけ鳴らす
-    if (!speak(w)) chirp(400 + (i % 10) * 60);
+    if (!(withKana ? speak(k, w) : speak(w))) chirp(400 + (i % 10) * 60);
   }
 
-  function reveal() {
-    const [k, w, e] = KANA[i];
-    shown = true;
-    emojiEl.textContent = e;
-    wordEl.innerHTML = w.replace(k, `<b>${k}</b>`);
-    pic.classList.remove('hidden', 'pop');
-    void pic.offsetWidth;
-    pic.classList.add('pop');
-    count++;
-    cntEl.textContent = String(count);
-    say();
+  function tapEgg(egg: Egg) {
+    if (done || egg.state === 'open') return;
+    const [k] = KANA[egg.i];
+    if (egg.state === 'whole') {
+      // 1 回目: ぐらっと揺れてヒビが入る
+      egg.state = 'cracked';
+      egg.el.classList.remove('drop');
+      egg.el.classList.add('cracked');
+      tone(330, 0, 0.08, 0.2, 'triangle');
+      tone(440, 0.1, 0.08, 0.2, 'triangle');
+      if (!speak(k)) chirp(300 + (egg.i % 10) * 40);
+      return;
+    }
+    // 2 回目: パカッと割れて出てくる
+    if (got.length >= GOAL) return;
+    egg.state = 'open';
+    const slot = got.length;
+    got.push(egg.i);
+    egg.el.classList.add('open');
+    chirp(500 + (slot % 8) * 80);
+    say(egg.i, true);
+    setTimeout(() => collect(egg, slot), 1400);
   }
 
-  function next() {
-    if (random) {
-      let j;
-      do j = Math.floor(Math.random() * KANA.length); while (j === i);
-      i = j;
-    } else i = (i + 1) % KANA.length;
-    render();
+  /** 出てきた絵をずかんへ飛ばし、あいた所に新しいたまごを置く */
+  function collect(egg: Egg, slot: number) {
+    const i = egg.i;
+    const pic = egg.el.querySelector<HTMLElement>('.pic')!;
+    const to = book.children[slot] as HTMLElement;
+    const a = pic.getBoundingClientRect(), b = to.getBoundingClientRect();
+    const fly = document.createElement('div');
+    fly.className = 'fly';
+    fly.textContent = KANA[i][2];
+    const size = parseFloat(getComputedStyle(pic).fontSize);
+    fly.style.cssText = `left:${a.left + a.width / 2 - size / 2}px;top:${a.top}px;font-size:${size}px`;
+    document.body.appendChild(fly);
+    const dx = b.left + b.width / 2 - (a.left + a.width / 2), dy = b.top + b.height / 2 - (a.top + size / 2);
+    fly.animate([{ transform: 'none' }, { transform: `translate(${dx}px, ${dy}px) scale(${30 / size})` }], { duration: 500, easing: 'ease-in' }).onfinish = () => {
+      fly.remove();
+      fillSlot(slot, i);
+    };
+    if (got.length >= GOAL) {
+      done = true;
+      setTimeout(finish, 700);
+    } else setEgg(egg);
   }
 
-  // タップごとに「つぎのもじを出して読む」→「絵を出して、ことばを読む」を繰り返す
-  onTap(card, () => {
-    if (!shown) return reveal();
-    next();
-    if (!speak(KANA[i][0])) chirp(300 + (i % 10) * 40);
+  function fillSlot(slot: number, i: number) {
+    const [k, , e] = KANA[i];
+    const s = book.children[slot] as HTMLElement;
+    s.className = 'slot got pop';
+    s.dataset.i = String(i);
+    s.innerHTML = `<span class="e">${e}</span><span class="s" style="color:${ROW_COLORS[rowOf(i)]}">${k}</span>`;
+    tone(880 + slot * 40, 0, 0.12, 0.15);
+    cntEl.textContent = String(slot + 1);
+  }
+
+  /** ずかん いっぱい。集めた絵は残して「どれが すき?」と話せるようにする */
+  function finish() {
+    full.hidden = false;
+    book.classList.add('done');
+    [523, 659, 784].forEach((f) => tone(f, 0, 0.6, 0.12));
+    tone(1047, 0.12, 0.7, 0.12);
+    speak('ずかん いっぱい！', 'どれが すき？');
+  }
+
+  function reset() {
+    if (done && full.hidden) return; // finish 待ちの間は無視する
+    done = false;
+    got = [];
+    cntEl.textContent = '0';
+    full.hidden = true;
+    book.classList.remove('done');
+    book.innerHTML = '';
+    for (let n = 0; n < GOAL; n++) {
+      const s = document.createElement('div');
+      s.className = 'slot';
+      book.appendChild(s);
+    }
+    for (const egg of eggs) egg.i = -1;
+    for (const egg of eggs) setEgg(egg);
+  }
+
+  for (let n = 0; n < EGGS; n++) {
+    const el = document.createElement('div');
+    const egg: Egg = { el, id: n, i: -1, state: 'whole' };
+    nest.appendChild(el);
+    eggs.push(egg);
+    onTap(el, () => tapEgg(egg));
+  }
+  // ずかんのマスをタップすると、もういちど読む
+  onTap(book, (_, e) => {
+    const s = (e.target as Element).closest<HTMLElement>('.slot.got');
+    if (!s) return;
+    say(Number(s.dataset.i), false);
+    s.classList.remove('pop');
+    void s.offsetWidth;
+    s.classList.add('pop');
   });
-  // 絵をタップするともういちど読む
-  onTap(pic, () => (shown ? say() : reveal()));
-  onTap(modeBtn, () => {
-    random = !random;
-    modeBtn.textContent = random ? 'ばらばら' : 'じゅんばん';
-  });
-
-  render();
+  onTap('#rst', reset);
+  onTap('#again', reset);
+  reset();
 </script>
