@@ -4,23 +4,6 @@
 
 公開先: https://tmokmss.github.io/omocha/
 
-## コンセプト
-
-- 対象: 3歳前後。文字が読めなくても遊べる
-- 操作: タップだけ。1タップで必ず見た目と音が反応する
-- 失敗なし・終わりなし: 時間制限やゲームオーバーがなく、親がいつでも止められる
-- 数を数える要素: 「なんさら?」「なんこ?」と親子の会話のきっかけになる
-- 場所ネタ: 回転寿司ならお寿司、ハンバーガー屋ならハンバーガー、のようにその場に合わせたテーマ
-- 実在のブランドのロゴやキャラクターは使わず、オリジナルの絵で作る
-- 画像ファイルや外部 CDN に頼らず、絵は SVG / CSS、音は Web Audio で作る
-
-## ゲーム一覧
-
-| ページ | 名前 | 遊び方 |
-|---|---|---|
-| `src/pages/sushi.astro` | かいてんずし | 流れてくるお寿司をタップして食べる。食べたお皿が下に積み上がる |
-| `src/pages/burger.astro` | ハンバーガーづくり | 具をタップして積む。「ふた」をのせると完成してジャンプする |
-
 ## 開発
 
 ```sh
@@ -32,41 +15,9 @@ npm run preview  # ビルド結果を確認
 
 [Astro](https://astro.build/) で静的サイトとしてビルドし、`main` への push で GitHub Actions (`.github/workflows/deploy.yml`) が GitHub Pages にデプロイする。
 
-### 構成
-
-```
-integrations/
-  service-worker.ts        ビルド後に dist/ 全体を precache する sw.js を生成
-public/
-  manifest.webmanifest     PWA の manifest
-  icons/                   アプリアイコン (icon.svg が元絵、PNG は rsvg-convert で生成)
-src/
-  games.ts                 ゲーム一覧(トップページに並ぶ)
-  layouts/GameLayout.astro 共通の <head>、色変数、ダークモード、ボタン、もどるリンク
-  lib/audio.ts             Web Audio の共通処理 (tone / chirp)
-  lib/url.ts               base (/omocha/) を考慮したリンク生成
-  pages/index.astro        トップページ
-  pages/<slug>.astro       各ゲーム
-```
-
 ### ゲームの追加手順
 
 1. `src/pages/<slug>.astro` を作る。`GameLayout` で包み、ロジックは `<script>` に書く(TypeScript 可)
    - JS で動的に作る要素のスタイルは Astro のスコープが効かないので `<style is:global>` に書く
    - 音は `../lib/audio` の `tone()` / `chirp()` を使う
 2. `src/games.ts` に 1 件追加する
-
-### PWA (ホーム画面に追加)
-
-- iPad / iPhone: Safari で開いて 共有 →「ホーム画面に追加」
-- Android: Chrome で開いて メニュー →「ホーム画面に追加」(または「アプリをインストール」)
-- 一度開けば全ページがキャッシュされ、オフラインでも遊べる
-- キャッシュ優先で表示するので、デプロイ後の新しい版は「アプリを開く → 閉じる → もう一度開く」で反映される
-- Service Worker は本番ビルドでのみ登録する (`npm run dev` では登録しない)
-- アイコンを変えたら `rsvg-convert -w 512 -h 512 public/icons/icon.svg -o public/icons/icon-512.png` のように PNG を作り直す(192 / 512 / apple-touch-icon 180)
-
-### メモ
-
-- 音は最初のタップで AudioContext を作るので、iOS の自動再生制限には引っかからない
-- iPhone ではマナーモード(消音スイッチ)だと Web Audio の音が出ないことがある
-- お店で遊ぶので音量は小さめ推奨
