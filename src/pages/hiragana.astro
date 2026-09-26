@@ -110,9 +110,9 @@ import GameLayout from '../layouts/GameLayout.astro';
   }
 
   function say() {
-    const [k, w] = KANA[i];
+    const w = KANA[i][1];
     // 日本語の声がない端末では効果音だけ鳴らす
-    if (!speak(k, w)) chirp(400 + (i % 10) * 60);
+    if (!speak(w)) chirp(400 + (i % 10) * 60);
   }
 
   function reveal() {
@@ -137,7 +137,7 @@ import GameLayout from '../layouts/GameLayout.astro';
     render();
   }
 
-  // タップごとに「つぎのもじを出して読む」→「絵を出して、もじとことばを読む」を繰り返す
+  // タップごとに「つぎのもじを出して読む」→「絵を出して、ことばを読む」を繰り返す
   onTap(card, () => {
     if (!shown) return reveal();
     next();
