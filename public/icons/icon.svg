@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 84 84">
-  <rect width="84" height="84" fill="#FAC775"/>
-  <g transform="translate(9 8) scale(.78)">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" fill="#FAC775"/>
+  <g transform="translate(256 262) scale(3.6) translate(-42 -46)">
     <ellipse cx="42" cy="62" rx="38" ry="12" fill="#E24B4A"/>
     <ellipse cx="42" cy="59" rx="30" ry="8" fill="#F1EFE8"/>
     <rect x="16" y="34" width="52" height="24" rx="12" fill="#FFFFFF" stroke="#D3D1C7"/>
