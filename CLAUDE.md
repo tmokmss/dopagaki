@@ -19,6 +19,8 @@ npm run preview  # ビルド結果を確認
 
 Astro で静的サイトとしてビルドし、`main` への push で GitHub Actions (`.github/workflows/deploy.yml`) が GitHub Pages にデプロイする。
 
+PR は draft ではなく Ready 状態で出す。
+
 # ゲームの追加手順
 
 1. `src/pages/<slug>.astro` を作る。`GameLayout` で包み、ロジックは `<script>` に書く(TypeScript 可)
