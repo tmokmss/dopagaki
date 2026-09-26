@@ -717,7 +717,6 @@ import GameLayout from '../layouts/GameLayout.astro';
     p.append(
       el('div', 'emo', '🎉'),
       el('h2', '', 'ゴール！ きょうは おしまい'),
-      el('p', '', `いまは 1〜${S.max} の数を練習しています。1 日 1 回、数分ずつを毎日続けると覚えやすくなります（間をあけて繰り返すことと、昼寝や夜の睡眠が記憶を助けます）。`),
     );
     const again = el('button', 'again', 'もういっかい');
     onTap(again, () => start());
