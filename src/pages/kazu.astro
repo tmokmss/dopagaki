@@ -125,20 +125,24 @@ import GameLayout from '../layouts/GameLayout.astro';
   .count .row { flex: 1 1 55%; display: flex; align-items: center; justify-content: center; gap: 2cqw; }
   .count .obj { font-size: min(15cqw, 26cqh); }
   .count .row.all .obj { animation: kjump .5s ease-out; }
+  .count .badge { font-size: .42em; }
+  /* 下の余りに、今数えた数を大きく出す。数え終わったら数字と指、その下に「ぜんぶで ○こ」 */
   .result {
     flex: 1 1 45%;
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 3cqw;
+    gap: 1cqh;
     font-family: "Hiragino Maru Gothic ProN", "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif;
-    font-size: min(8cqw, 10cqh);
+    font-size: min(8cqw, 7cqh);
     font-weight: 700;
   }
-  .result b { font-size: 2.6em; line-height: 1; color: #E24B4A; }
-  .result .hand { width: 2.2em; height: 2.7em; }
+  .result .big { display: flex; align-items: center; gap: .1em; font-size: min(34cqw, 26cqh); line-height: 1; }
+  .result b { color: #E24B4A; }
+  .result .hand { width: .7em; height: .85em; }
   /* 下端に接しているので、1 倍を超えて弾ませない (はみ出すため) */
-  .result.show { animation: kpop .4s ease-out; }
+  .result .big.pop, .result.show { animation: kpop .4s ease-out; }
 
   /* えらぶ */
   .choose { height: 100%; display: flex; align-items: center; justify-content: center; gap: 4cqw; }
@@ -506,6 +510,7 @@ import GameLayout from '../layouts/GameLayout.astro';
           b.classList.add('counted');
           b.append(el('span', 'badge', String(c)));
           restart(b, 'pop');
+          res.innerHTML = `<div class="big pop"><b>${c}</b></div>`;
           sayNum(c);
           if (c === n) resolve();
         });
@@ -516,7 +521,7 @@ import GameLayout from '../layouts/GameLayout.astro';
     await sleep(700);
     // 最後に言った数が全体の数 (基数) であることを、数字と指の形といっしょに示す
     row.classList.add('all');
-    res.innerHTML = `<b>${n}</b>${hand(n)}<span>ぜんぶで ${n}こ</span>`;
+    res.innerHTML = `<div class="big"><b>${n}</b>${hand(n)}</div><span>ぜんぶで ${n}こ</span>`;
     res.classList.add('show');
     celebrate(res);
     await say(`ぜんぶで ${KO[n]}`);
