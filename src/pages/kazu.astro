@@ -236,13 +236,13 @@ import GameLayout from '../layouts/GameLayout.astro';
   // 数えるたびに 1 音ずつ上がる (ド レ ミ ファ ソ ラ シ ド レ ミ)。数が増える = 音が高くなる
   const SCALE = [0, 523, 587, 659, 698, 784, 880, 988, 1047, 1175, 1319];
   // ゴールで出てくるもの。毎回ちがうものにする (予告しないので、ごほうび目当てにはならない)
-  // name と verb は画面に出すひらがな、talk は読み上げ用
-  interface Party { emo: string; name: string; verb: string; talk: string; out: string[] }
+  // text は画面に出すひらがな、talk は読み上げ用
+  interface Party { emo: string; text: string; talk: string; out: string[] }
   const PARTIES: Party[] = [
-    { emo: '🎈', name: 'ふうせん', verb: 'わろう', talk: '風船を 割ろう', out: ['💥'] },
-    { emo: '🫧', name: 'しゃぼんだま', verb: 'わろう', talk: 'シャボン玉を 割ろう', out: ['✨'] },
-    { emo: '🥚', name: 'たまご', verb: 'わってみよう', talk: '卵を 割ってみよう', out: ['🐣', '🐥', '🐢', '🦖', '🐊', '🦎', '🐧', '🐍'] },
-    { emo: '🎁', name: 'プレゼント', verb: 'あけよう', talk: 'プレゼントを 開けよう', out: ['🧸', '🚗', '⚽', '🪀', '🍭', '🎨', '🚀', '🦕'] },
+    { emo: '🎈', text: 'ふうせんを わろう', talk: '風船を 割ろう', out: ['💥'] },
+    { emo: '🫧', text: 'しゃぼんだまを わろう', talk: 'シャボン玉を 割ろう', out: ['✨'] },
+    { emo: '🥚', text: 'たまごを わってみよう', talk: '卵を 割ってみよう', out: ['🐣', '🐥', '🐢', '🦖', '🐊', '🦎', '🐧', '🐍'] },
+    { emo: '🎁', text: 'プレゼントを あけよう', talk: 'プレゼントを 開けよう', out: ['🧸', '🚗', '⚽', '🪀', '🍭', '🎨', '🚀', '🦕'] },
   ];
   // コマは進むほど育つ
   const face = (p: number) => (p === 0 ? '🥚' : p < 4 ? '🐣' : p < 7 ? '🐤' : p < GOAL ? '🐥' : '🐔');
@@ -686,8 +686,8 @@ import GameLayout from '../layouts/GameLayout.astro';
     let pi;
     do pi = rand(PARTIES.length); while (pi === S.party);
     S.party = pi;
-    const { emo, name, verb, talk, out } = PARTIES[pi];
-    setPrompt(null, `${name}を ${verb}`, [`ゴール！ ${talk}`]);
+    const { emo, text, talk, out } = PARTIES[pi];
+    setPrompt(null, text, [`ゴール！ ${talk}`]);
     const wrap = el('div', 'party');
     show(wrap);
     celebrate(board, 50);
