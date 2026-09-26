@@ -61,6 +61,13 @@ const { title, back = true, scroll = false } = Astro.props;
     document.addEventListener('gesturestart', stop);
     document.addEventListener('contextmenu', stop);
 
+    // 画面の端をスワイプすると (iOS のエッジスワイプ、Android のジェスチャーナビ) ブラウザの「戻る」になり、
+    // 遊んでいる途中でトップに戻ってしまう。これは OS / ブラウザの操作なので touchmove を止めても防げない。
+    // 同じ URL の履歴を 1 つ積んでおき、戻る操作が来たらそれを消費するだけで画面に留まり、また積み直す。
+    // トップへは「もどる」リンクで戻れる
+    if (!history.state?.stay) history.pushState({ stay: true }, '');
+    addEventListener('popstate', () => history.pushState({ stay: true }, ''));
+
     // 100dvh は Android Chrome などで実際に見えている高さより大きくなり、下が画面外に切れることがある。
     // 見えている高さを JS で測って --app-h に入れ、body の高さに使う
     const root = document.documentElement;
