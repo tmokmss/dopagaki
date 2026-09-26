@@ -16,8 +16,10 @@ const buttons = [
     <span id="msg"></span>
   </div>
   <div class="board grow">
-    <div id="stack"></div>
-    <div class="tray"></div>
+    <div id="burger">
+      <div id="stack"></div>
+      <div class="tray"></div>
+    </div>
   </div>
   <div class="grid">
     {buttons.map((b) => (
@@ -30,7 +32,9 @@ const buttons = [
 
 <style is:global>
   #msg { color: var(--text-success); }
-  .board { border-radius: 12px; background: var(--surface-1); display: flex; flex-direction: column; justify-content: flex-end; padding-bottom: 16px; overflow: hidden; }
+  .board { border-radius: 12px; background: var(--surface-1); display: flex; flex-direction: column; justify-content: flex-end; padding: 12px 0 16px; overflow: hidden; }
+  /* 高く積んで盤面からはみ出しそうなときは、お皿を基準に全体を縮めて収める (倍率は JS で決める) */
+  #burger { flex-shrink: 0; transform-origin: 50% 100%; transition: transform .25s ease-out; }
   #stack { display: flex; flex-direction: column-reverse; width: 200px; margin: 0 auto; }
   .tray { width: 240px; height: 10px; border-radius: 5px; background: #D3D1C7; margin: 2px auto 0; }
   .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 14px; }
@@ -60,6 +64,8 @@ const buttons = [
   const stack = document.getElementById('stack')!;
   const cnt = document.getElementById('cnt')!;
   const msg = document.getElementById('msg')!;
+  const board = document.querySelector<HTMLElement>('.board')!;
+  const burger = document.getElementById('burger')!;
   let n = 0, busy = false;
 
   function add(k: string) {
@@ -73,7 +79,16 @@ const buttons = [
       d.innerHTML = seeds + eyes;
     }
     stack.appendChild(d);
+    fit();
   }
+
+  function fit() {
+    const cs = getComputedStyle(board);
+    const room = board.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+    const s = Math.min(1, room / burger.offsetHeight);
+    burger.style.transform = s < 1 ? `scale(${s})` : '';
+  }
+  new ResizeObserver(fit).observe(board);
 
   function reset() { stack.innerHTML = ''; msg.textContent = ''; add('bottom'); busy = false; }
 
