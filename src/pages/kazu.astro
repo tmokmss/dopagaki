@@ -13,7 +13,7 @@ import GameLayout from '../layouts/GameLayout.astro';
   - 3歳は 1〜3 (〜5) の「量 ⇔ 数詞」が主戦場。数字は常に量・音声と並べて出す
   - 毎回「かぞえる → ぜんぶで ○こ」をセットにする
   - 触るのは数える物そのもの。どこを触っても進む UI にしない
-  - 想起は 2〜3 択とちょうだい課題。間違えても罰せず、一緒に数え直す
+  - 想起は 2〜3 択とちょうだい課題。正誤はピンポーン / ブッブーで短く知らせ、間違えたらすぐ一緒に数え直す
   - 1〜10 の直線すごろくで、進むときはマスの数を読む (今いるマスから数え足す)
   - ゴールしたらその日はおしまい。コインやスタンプなどのごほうびは付けない
 -->
@@ -187,7 +187,7 @@ import GameLayout from '../layouts/GameLayout.astro';
 </style>
 
 <script>
-  import { chirp, tone } from '../lib/audio';
+  import { buzz, chirp, pinpon, tone } from '../lib/audio';
   import { speak, speakWait } from '../lib/speech';
   import { onTap } from '../lib/tap';
 
@@ -450,6 +450,8 @@ import GameLayout from '../layouts/GameLayout.astro';
       if (c === right) break;
       first = false;
       restart(c, 'shake');
+      buzz();
+      await sleep(800);
       const v = +c.dataset.v!;
       await say('いっしょに かぞえよう');
       await countAloud(dots(c));
@@ -459,9 +461,10 @@ import GameLayout from '../layouts/GameLayout.astro';
     }
     right.classList.remove('hintme');
     right.classList.add('right');
-    chirp(600);
+    pinpon();
+    await sleep(1000);
     await countAloud(dots(right));
-    await say(first ? `ぴったり ${KO[n]}！ よく みつけたね` : `${KO[n]}、 みつけたね`);
+    await say(KO[n]);
     return first;
   }
 
@@ -506,11 +509,14 @@ import GameLayout from '../layouts/GameLayout.astro';
       busy = true;
       const got = onPlate().length;
       if (got === n) {
-        chirp(600);
+        pinpon();
+        await sleep(1000);
         await countAloud(onPlate());
-        await say(attempt === 0 ? `ぴったり ${KO[n]}！ ひとつずつ のせられたね` : `${KO[n]}、 できたね`);
+        await say(KO[n]);
         return attempt === 0;
       }
+      buzz();
+      await sleep(800);
       await say('いっしょに かぞえてみよう');
       await countAloud(onPlate());
       await say(`${KO[got]} だね`);

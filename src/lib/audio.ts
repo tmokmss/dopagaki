@@ -11,10 +11,11 @@ export function audio(): AudioContext | null {
 }
 
 /** 単音を鳴らす。t: 開始までの秒数, d: 長さ(秒) */
-export function tone(freq: number, t = 0, d = 0.15, vol = 0.25) {
+export function tone(freq: number, t = 0, d = 0.15, vol = 0.25, type: OscillatorType = 'sine') {
   const c = audio();
   if (!c) return;
   const o = c.createOscillator(), g = c.createGain();
+  o.type = type;
   o.frequency.value = freq;
   g.gain.setValueAtTime(vol, c.currentTime + t);
   g.gain.exponentialRampToValueAtTime(0.001, c.currentTime + t + d);
@@ -38,4 +39,16 @@ export function chirp(from: number, to = 1200, d = 0.25, vol = 0.3) {
   g.connect(c.destination);
   o.start();
   o.stop(c.currentTime + d);
+}
+
+/** 正解の「ピンポーン」(約 0.9 秒) */
+export function pinpon() {
+  tone(1319, 0, 0.4, 0.3);
+  tone(1047, 0.3, 0.6, 0.3);
+}
+
+/** 不正解の「ブッブー」(約 0.7 秒) */
+export function buzz() {
+  tone(155, 0, 0.16, 0.15, 'square');
+  tone(155, 0.22, 0.45, 0.15, 'square');
 }
