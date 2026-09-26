@@ -3,9 +3,22 @@
 
 let jaVoice: SpeechSynthesisVoice | null = null;
 
+// 声の良さの順位。大きいほど優先する
+// Mac/iOS の Eddy, Flo, Grandma などは簡易音声(Eloquence)で質が低いので後回しにする
+const LOW_QUALITY = /^(Eddy|Flo|Grandma|Grandpa|Reed|Rocko|Sandy|Shelley)\b/;
+function score(v: SpeechSynthesisVoice) {
+  if (/Google/.test(v.name)) return 50; // Chrome / Android の Google 音声
+  if (/Premium|プレミアム/.test(v.name)) return 40;
+  if (/Enhanced|拡張/.test(v.name)) return 30;
+  if (/O-?ren|Kyoko|Otoya|Hattori/.test(v.name)) return 20;
+  if (LOW_QUALITY.test(v.name)) return 0;
+  return v.default ? 15 : 10;
+}
+
 function pickVoice() {
   const voices = speechSynthesis.getVoices();
-  jaVoice = voices.find((v) => v.lang.replace('_', '-').toLowerCase().startsWith('ja')) ?? null;
+  const ja = voices.filter((v) => v.lang.replace('_', '-').toLowerCase().startsWith('ja'));
+  jaVoice = ja.sort((a, b) => score(b) - score(a))[0] ?? null;
   return voices;
 }
 
@@ -30,8 +43,8 @@ export function speak(...texts: string[]): boolean {
     const u = new SpeechSynthesisUtterance(text);
     u.lang = 'ja-JP';
     if (jaVoice) u.voice = jaVoice;
-    u.rate = 0.85;
-    u.pitch = 1.1;
+    // pitch をいじると音質が落ちやすいのでそのまま。少しだけゆっくり
+    u.rate = 0.9;
     speechSynthesis.speak(u);
   }
   return true;
