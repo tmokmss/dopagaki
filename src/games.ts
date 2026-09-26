@@ -33,4 +33,11 @@ export const games: Game[] = [
     icon: 'あ',
     place: 'どこでも',
   },
+  {
+    slug: 'kazu',
+    title: 'かずあそび',
+    description: '数えて・選んで・「○こちょうだい」。できた数だけすごろくが進み、ゴールでその日はおしまい。数の範囲は自動で調整',
+    icon: '🔢',
+    place: 'どこでも',
+  },
 ];

@@ -35,10 +35,11 @@ export function canSpeak(): boolean {
   return voices.length === 0 || jaVoice !== null;
 }
 
-/** texts を順に読み上げる。前の読み上げは止める */
-export function speak(...texts: string[]): boolean {
-  if (!canSpeak()) return false;
+/** texts を順に読み上げ、最後の発話を返す。前の読み上げは止める */
+function utter(texts: string[]): SpeechSynthesisUtterance | null {
+  if (!canSpeak()) return null;
   speechSynthesis.cancel();
+  let last: SpeechSynthesisUtterance | null = null;
   for (const text of texts) {
     const u = new SpeechSynthesisUtterance(text);
     u.lang = 'ja-JP';
@@ -46,6 +47,29 @@ export function speak(...texts: string[]): boolean {
     // pitch をいじると音質が落ちやすいのでそのまま。少しだけゆっくり
     u.rate = 0.9;
     speechSynthesis.speak(u);
+    last = u;
   }
-  return true;
+  return last;
+}
+
+/** texts を順に読み上げる。前の読み上げは止める */
+export function speak(...texts: string[]): boolean {
+  return utter(texts) !== null;
+}
+
+/** speak と同じだが、読み終わったら解決する。読み上げられないときは false で解決する */
+export function speakWait(...texts: string[]): Promise<boolean> {
+  return new Promise((resolve) => {
+    const u = utter(texts);
+    if (!u) return resolve(false);
+    let timer = 0;
+    const fin = () => {
+      clearTimeout(timer);
+      resolve(true);
+    };
+    u.onend = fin;
+    u.onerror = fin;
+    // onend が来ない端末があるので、長さの目安で打ち切る
+    timer = window.setTimeout(fin, 1500 + texts.join('').length * 300);
+  });
 }
