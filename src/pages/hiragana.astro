@@ -6,7 +6,7 @@ import GameLayout from '../layouts/GameLayout.astro';
     <span>よんだ: <span id="cnt">0</span> もじ</span>
     <button id="mode" style="font-size:16px;font-weight:400">じゅんばん</button>
   </div>
-  <button id="card" aria-label="つぎのもじ">
+  <button id="card" aria-label="もじ">
     <span id="kana">あ</span>
   </button>
   <button id="pic" aria-label="もういちど">
@@ -135,10 +135,11 @@ import GameLayout from '../layouts/GameLayout.astro';
     render();
   }
 
-  // 1回目のタップは今のもじを読む。以降はタップごとに次のもじへ進んで読む
+  // タップごとに「つぎのもじを出して読む」→「絵を出して、もじとことばを読む」を繰り返す
   card.addEventListener('click', () => {
-    if (shown) next();
-    reveal();
+    if (!shown) return reveal();
+    next();
+    if (!speak(KANA[i][0])) chirp(300 + (i % 10) * 40);
   });
   // 絵をタップするともういちど読む
   pic.addEventListener('click', () => (shown ? say() : reveal()));
