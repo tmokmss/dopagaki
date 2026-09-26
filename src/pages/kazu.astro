@@ -225,27 +225,30 @@ import GameLayout from '../layouts/GameLayout.astro';
   import { speak, speakWait } from '../lib/speech';
   import { onTap } from '../lib/tap';
 
-  type Item = [emoji: string, name: string];
+  // name は画面に出すひらがな、yomi は読み上げ用の表記 (src/lib/speech.ts の speak を参照)
+  type Item = [emoji: string, name: string, yomi: string];
   type Task = 'count' | 'choose' | 'give';
 
-  const WORD = ['ぜろ', 'いち', 'に', 'さん', 'よん', 'ご', 'ろく', 'なな', 'はち', 'きゅう', 'じゅう'];
+  // 読み上げ用。4 を「し」、7 を「しち」と読まれないようカタカナで書く
+  const WORD = ['ゼロ', 'イチ', 'ニ', 'サン', 'ヨン', 'ゴ', 'ロク', 'ナナ', 'ハチ', 'キュウ', 'ジュウ'];
   // 助数詞は「こ」にそろえる (数え方が混ざると 3 歳には負担なので、どれも「こ」で数えられる物にする)
-  const KO = ['', 'いっこ', 'にこ', 'さんこ', 'よんこ', 'ごこ', 'ろっこ', 'ななこ', 'はっこ', 'きゅうこ', 'じゅっこ'];
+  const KO = ['', '1個', '2個', '3個', '4個', '5個', '6個', '7個', '8個', '9個', '10個'];
   // 数えるたびに 1 音ずつ上がる (ド レ ミ ファ ソ ラ シ ド レ ミ)。数が増える = 音が高くなる
   const SCALE = [0, 523, 587, 659, 698, 784, 880, 988, 1047, 1175, 1319];
   // ゴールで出てくるもの。毎回ちがうものにする (予告しないので、ごほうび目当てにはならない)
-  interface Party { emo: string; name: string; verb: string; out: string[] }
+  // name と verb は画面に出すひらがな、talk は読み上げ用
+  interface Party { emo: string; name: string; verb: string; talk: string; out: string[] }
   const PARTIES: Party[] = [
-    { emo: '🎈', name: 'ふうせん', verb: 'わろう', out: ['💥'] },
-    { emo: '🫧', name: 'しゃぼんだま', verb: 'わろう', out: ['✨'] },
-    { emo: '🥚', name: 'たまご', verb: 'わってみよう', out: ['🐣', '🐥', '🐢', '🦖', '🐊', '🦎', '🐧', '🐍'] },
-    { emo: '🎁', name: 'プレゼント', verb: 'あけよう', out: ['🧸', '🚗', '⚽', '🪀', '🍭', '🎨', '🚀', '🦕'] },
+    { emo: '🎈', name: 'ふうせん', verb: 'わろう', talk: '風船を 割ろう', out: ['💥'] },
+    { emo: '🫧', name: 'しゃぼんだま', verb: 'わろう', talk: 'シャボン玉を 割ろう', out: ['✨'] },
+    { emo: '🥚', name: 'たまご', verb: 'わってみよう', talk: '卵を 割ってみよう', out: ['🐣', '🐥', '🐢', '🦖', '🐊', '🦎', '🐧', '🐍'] },
+    { emo: '🎁', name: 'プレゼント', verb: 'あけよう', talk: 'プレゼントを 開けよう', out: ['🧸', '🚗', '⚽', '🪀', '🍭', '🎨', '🚀', '🦕'] },
   ];
   // コマは進むほど育つ
   const face = (p: number) => (p === 0 ? '🥚' : p < 4 ? '🐣' : p < 7 ? '🐤' : p < GOAL ? '🐥' : '🐔');
   const ITEMS: Item[] = [
-    ['🍎', 'りんご'], ['🍓', 'いちご'], ['🍊', 'みかん'], ['🍙', 'おにぎり'],
-    ['🍩', 'ドーナツ'], ['🍪', 'クッキー'], ['🍬', 'あめ'], ['⭐', 'ほし'],
+    ['🍎', 'りんご', 'リンゴ'], ['🍓', 'いちご', 'イチゴ'], ['🍊', 'みかん', 'ミカン'], ['🍙', 'おにぎり', 'お握り'],
+    ['🍩', 'ドーナツ', 'ドーナツ'], ['🍪', 'クッキー', 'クッキー'], ['🍬', 'あめ', '飴'], ['⭐', 'ほし', '星'],
   ];
   // サイコロの目の並び (3×3 のマスの何番目に置くか)。整った並びの方が 3 歳でも数を把握しやすい
   const DICE = [[], [4], [0, 8], [0, 4, 8], [0, 2, 6, 8], [0, 2, 4, 6, 8], [0, 2, 3, 5, 6, 8]];
@@ -453,8 +456,8 @@ import GameLayout from '../layouts/GameLayout.astro';
   /** n マス進む。1 マスずつ子どもがタップして、止まったマスの数を読む (今いるマスから数え足す) */
   async function advance(n: number) {
     stage.classList.add('dim');
-    setPrompt(n, `${n} すすもう`, [`${WORD[n]} すすもう`], true);
-    speak(`${WORD[n]} すすもう`);
+    setPrompt(n, `${n} すすもう`, [`${WORD[n]} 進もう`], true);
+    speak(...promptTalk);
     let hit = false;
     for (let s = 0; s < n && pos < GOAL; s++) {
       cells[pos + 1].classList.add('next');
@@ -474,7 +477,7 @@ import GameLayout from '../layouts/GameLayout.astro';
   /** ？マスのくす玉。タップすると割れて、中身を数える */
   async function mysteryEvent() {
     setMystery(-1);
-    setPrompt(null, 'なにが はいってるかな？', ['なにが はいってるかな？']);
+    setPrompt(null, 'なにが はいってるかな？', ['何が 入ってるかな？']);
     const p = el('div', 'panel');
     const ball = el('button', 'kusudama', '🎁');
     p.append(ball);
@@ -491,12 +494,12 @@ import GameLayout from '../layouts/GameLayout.astro';
   // ---- 課題 ----
 
   /** かぞえる: 物を 1 つずつタップして数え、最後に「ぜんぶで ○こ」と数字・指といっしょに見せる */
-  async function countTask(n: number, [emo, name]: Item) {
-    setPrompt(null, `${name}を かぞえよう`, [`${name}を かぞえよう`]);
+  async function countTask(n: number, [emo, name, yomi]: Item) {
+    setPrompt(null, `${name}を かぞえよう`, [`${yomi}を 数えよう`]);
     const wrap = el('div', 'count'), row = el('div', 'row'), res = el('div', 'result');
     wrap.append(row, res);
     show(wrap);
-    speak(`${name}を かぞえよう`);
+    speak(...promptTalk);
 
     let c = 0;
     await new Promise<void>((resolve) => {
@@ -524,7 +527,7 @@ import GameLayout from '../layouts/GameLayout.astro';
     res.innerHTML = `<div class="big"><b>${n}</b>${hand(n)}</div><span>ぜんぶで ${n}こ</span>`;
     res.classList.add('show');
     celebrate(res);
-    await say(`ぜんぶで ${KO[n]}`);
+    await say(`全部で ${KO[n]}`);
     await sleep(500);
   }
 
@@ -564,7 +567,7 @@ import GameLayout from '../layouts/GameLayout.astro';
       buzz();
       await sleep(800);
       const v = +c.dataset.v!;
-      await say('いっしょに かぞえよう');
+      await say('一緒に 数えよう');
       await countAloud(dots(c));
       await say(`これは ${KO[v]}`);
       right.classList.add('hintme');
@@ -581,8 +584,8 @@ import GameLayout from '../layouts/GameLayout.astro';
   }
 
   /** ちょうだい: 物をお皿に n こ載せて「はい どうぞ」。まちがえたら一緒に数え直して、もう一度 */
-  async function giveTask(n: number, [emo, name]: Item) {
-    const talk = `${name}を ${KO[n]} ちょうだい`;
+  async function giveTask(n: number, [emo, name, yomi]: Item) {
+    const talk = `${yomi}を ${KO[n]} ちょうだい`;
     setPrompt(n, `${name}を ${n}こ ちょうだい`, [talk]);
 
     const wrap = el('div', 'give'), pile = el('div', 'pile'), plate = el('div', 'plate');
@@ -610,7 +613,7 @@ import GameLayout from '../layouts/GameLayout.astro';
     let submit: (() => void) | null = null;
     onTap(ok, () => {
       if (busy) return;
-      if (!onPlate().length) return void speak('おさらに のせてね');
+      if (!onPlate().length) return void speak('お皿に 乗せてね');
       submit?.();
     });
     speak(talk);
@@ -629,7 +632,7 @@ import GameLayout from '../layouts/GameLayout.astro';
       }
       buzz();
       await sleep(800);
-      await say('いっしょに かぞえてみよう');
+      await say('一緒に 数えてみよう');
       await countAloud(onPlate());
       await say(`${KO[got]} だね`);
       if (attempt === 0) {
@@ -683,8 +686,8 @@ import GameLayout from '../layouts/GameLayout.astro';
     let pi;
     do pi = rand(PARTIES.length); while (pi === S.party);
     S.party = pi;
-    const { emo, name, verb, out } = PARTIES[pi];
-    setPrompt(null, `${name}を ${verb}`, [`ゴール！ ${name}を ${verb}`]);
+    const { emo, name, verb, talk, out } = PARTIES[pi];
+    setPrompt(null, `${name}を ${verb}`, [`ゴール！ ${talk}`]);
     const wrap = el('div', 'party');
     show(wrap);
     celebrate(board, 50);
@@ -712,12 +715,12 @@ import GameLayout from '../layouts/GameLayout.astro';
     await sleep(700);
     wrap.classList.add('all');
     celebrate(wrap, 70);
-    await say(`ぜんぶで ${KO[GOAL]}！`);
+    await say(`全部で ${KO[GOAL]}！`);
     await sleep(600);
   }
 
   function finish() {
-    setPrompt(null, 'ゴール！', ['ゴール！ きょうは おしまい。 また あしたね']);
+    setPrompt(null, 'ゴール！', ['ゴール！ 今日は おしまい。 また 明日ね']);
     const p = el('div', 'panel');
     p.append(
       el('div', 'emo', '🎉'),
@@ -734,7 +737,7 @@ import GameLayout from '../layouts/GameLayout.astro';
     pos = 0;
     place();
     setMystery(-1);
-    setPrompt(null, 'かずあそび', ['かずあそび']);
+    setPrompt(null, 'かずあそび', ['数遊び']);
     const p = el('div', 'panel');
     p.append(el('div', 'emo', face(0)));
     const go = el('button', 'go', 'はじめる');

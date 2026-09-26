@@ -35,8 +35,29 @@ export function canSpeak(): boolean {
   return voices.length === 0 || jaVoice !== null;
 }
 
+// 読み上げエンジンは単語に区切って辞書を引くので、ひらがなだけの文は区切りや読み・アクセントを誤りやすい
+// (そふとくりーむ→「ソート…」、あり→「有り」)。開発中と ?debug のときは、漢字・カタカナ・数字を 1 文字も含まない
+// 2 文字以上の文を読み上げたら画面上に警告を出す。1 文字だけ (ひらがなの「あ」など) は文字の名前なので対象外
+const WARN = typeof location !== 'undefined' && (import.meta.env.DEV || new URLSearchParams(location.search).has('debug'));
+let warnBar: HTMLDivElement | null = null;
+let warnTimer = 0;
+function checkKana(text: string) {
+  const body = text.replace(/[\s、。！？!?,.・「」ー〜]/g, '');
+  if (body.length < 2 || !/^[ぁ-ゟ]+$/.test(body)) return;
+  const msg = `読み上げがひらがなだけ: 「${text}」 漢字・カタカナで書く`;
+  console.warn('[speech]', msg);
+  warnBar ??= Object.assign(document.createElement('div'), {
+    style: 'position:fixed;left:0;right:0;top:0;z-index:9999;padding:6px 8px;font:12px/1.4 monospace;background:#E24B4A;color:#fff;pointer-events:none;white-space:pre-wrap',
+  });
+  warnBar.textContent = msg;
+  document.body.appendChild(warnBar);
+  clearTimeout(warnTimer);
+  warnTimer = window.setTimeout(() => warnBar?.remove(), 4000);
+}
+
 /** texts を順に読み上げ、最後の発話を返す。前の読み上げは止める */
 function utter(texts: string[]): SpeechSynthesisUtterance | null {
+  if (WARN) texts.forEach(checkKana);
   if (!canSpeak()) return null;
   speechSynthesis.cancel();
   let last: SpeechSynthesisUtterance | null = null;
@@ -52,7 +73,12 @@ function utter(texts: string[]): SpeechSynthesisUtterance | null {
   return last;
 }
 
-/** texts を順に読み上げる。前の読み上げは止める */
+/**
+ * texts を順に読み上げる。前の読み上げは止める
+ *
+ * texts は画面の表示と同じひらがなにせず、ふつうの漢字かな交じり・カタカナで書く
+ * (例: 表示「りんごを かぞえよう」→ 読み上げ「リンゴを 数えよう」)。表示用と読み上げ用の文字列を分けて持つ
+ */
 export function speak(...texts: string[]): boolean {
   return utter(texts) !== null;
 }
