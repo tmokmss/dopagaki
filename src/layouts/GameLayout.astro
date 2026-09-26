@@ -60,6 +60,46 @@ const { title, back = true, scroll = false } = Astro.props;
     document.addEventListener('touchmove', stop, { passive: false });
     document.addEventListener('gesturestart', stop);
     document.addEventListener('contextmenu', stop);
+
+    // 100dvh は Android Chrome などで実際に見えている高さより大きくなり、下が画面外に切れることがある。
+    // 見えている高さを JS で測って --app-h に入れ、body の高さに使う
+    const root = document.documentElement;
+    const setH = () => {
+      const h = Math.min(innerHeight, visualViewport?.height ?? innerHeight, root.clientHeight);
+      root.style.setProperty('--app-h', `${h}px`);
+    };
+    setH();
+    addEventListener('resize', setH);
+    visualViewport?.addEventListener('resize', setH);
+  }
+
+  // URL に ?debug を付けると、画面の高さまわりの値を表示する (実機でレイアウトが崩れたときの調査用)
+  if (new URLSearchParams(location.search).has('debug')) {
+    const probe = (css: string) => {
+      const d = document.createElement('div');
+      d.style.cssText = `position:fixed;left:0;top:0;width:0;visibility:hidden;${css}`;
+      document.body.appendChild(d);
+      return d;
+    };
+    const dvh = probe('height:100dvh'), svh = probe('height:100svh'), lvh = probe('height:100lvh');
+    const inset = probe('height:env(safe-area-inset-bottom, 0px)');
+    const box = document.createElement('pre');
+    box.style.cssText = 'position:fixed;left:4px;top:4px;z-index:9999;margin:0;padding:6px;font:12px/1.4 monospace;background:rgba(0,0,0,.75);color:#fff;border-radius:4px;pointer-events:none';
+    document.body.appendChild(box);
+    const show = () => {
+      box.textContent = [
+        `innerHeight ${innerHeight}`,
+        `visualViewport ${visualViewport?.height.toFixed(1)}`,
+        `html.clientHeight ${document.documentElement.clientHeight}`,
+        `body ${document.body.getBoundingClientRect().height.toFixed(1)}`,
+        `100dvh ${dvh.offsetHeight} / svh ${svh.offsetHeight} / lvh ${lvh.offsetHeight}`,
+        `safe-bottom ${inset.offsetHeight}`,
+        `screen ${screen.height} dpr ${devicePixelRatio}`,
+      ].join('\n');
+    };
+    show();
+    addEventListener('resize', show);
+    visualViewport?.addEventListener('resize', show);
   }
 </script>
 
@@ -108,7 +148,7 @@ const { title, back = true, scroll = false } = Astro.props;
     overscroll-behavior: none;
     touch-action: none;
   }
-  html.fit body { height: 100dvh; }
+  html.fit body { height: var(--app-h, 100dvh); }
   html.fit main { height: 100%; display: flex; flex-direction: column; }
   html.fit main > * { flex-shrink: 0; }
   html.fit main > .grow { flex: 1 1 0; min-height: 0; }
