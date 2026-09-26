@@ -3,11 +3,16 @@ import GameLayout from '../layouts/GameLayout.astro';
 ---
 <GameLayout title="かいてんずし">
   <div class="hud">
-    <span>たべた: <span id="cnt">0</span> さら</span>
+    <span>たべた: <span id="cnt">0</span> / <span id="goal"></span> さら</span>
     <button id="rst" style="font-size:16px;font-weight:400">もういちど</button>
   </div>
   <div id="lane">
     <div class="belt"></div>
+    <div id="full" hidden>
+      <div class="emo">😋</div>
+      <h2>おなかいっぱい！</h2>
+      <button id="again">もういっかい</button>
+    </div>
   </div>
   <div id="stack" class="grow" data-clip></div>
 </GameLayout>
@@ -20,10 +25,20 @@ import GameLayout from '../layouts/GameLayout.astro';
   .sushi { position: absolute; width: 84px; height: 84px; cursor: pointer; transition: transform .15s; }
   .sushi.pop { transform: scale(1.5); opacity: 0; transition: transform .3s, opacity .3s; }
   .plate { width: 44px; height: 10px; border-radius: 5px; margin-top: -3px; border: 0.5px solid rgba(0, 0, 0, .2); }
+  /* GOAL さら食べたらおしまい */
+  #full { position: absolute; inset: 0; z-index: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; background: var(--surface-1); animation: fpop .5s cubic-bezier(.3, 1.6, .5, 1); }
+  #full[hidden] { display: none; }
+  #full .emo { font-family: "Apple Color Emoji", "Noto Color Emoji", "Segoe UI Emoji", sans-serif; font-size: 96px; line-height: 1; }
+  #full h2 { margin: 0; font-family: "Hiragino Maru Gothic ProN", "Hiragino Sans", system-ui, sans-serif; font-size: 28px; }
+  #full button { background: #E24B4A; color: #fff; font-size: 22px; padding: 10px 32px; border-radius: 999px; }
+  #stack.done { animation: fjump .5s ease-out 2; }
+  @keyframes fpop { from { transform: scale(.4); opacity: 0; } to { transform: none; opacity: 1; } }
+  @keyframes fjump { 50% { transform: translateY(-12px); } }
 </style>
 
 <script>
-  import { chirp } from '../lib/audio';
+  import { chirp, tone } from '../lib/audio';
+  import { speak } from '../lib/speech';
   import { onTap } from '../lib/tap';
 
   interface Item { el: HTMLDivElement; x: number; y: number; sp: number; p: string; dead?: boolean }
@@ -31,11 +46,16 @@ import GameLayout from '../layouts/GameLayout.astro';
   const lane = document.getElementById('lane')!;
   const cntEl = document.getElementById('cnt')!;
   const stack = document.getElementById('stack')!;
+  const full = document.getElementById('full')!;
+  // 3 歳が数えきれて、待ち時間に収まる数
+  const GOAL = 10;
+  document.getElementById('goal')!.textContent = String(GOAL);
   const tops = [['#F0997B', '#D85A30'], ['#E24B4A', '#A32D2D'], ['#FAC775', '#EF9F27'], ['#F5C4B3', '#D85A30'], ['#97C459', '#3B6D11']];
   const plates = ['#E24B4A', '#378ADD', '#EF9F27', '#639922', '#D4537E'];
   const pick = <T,>(a: T[]) => a[Math.floor(Math.random() * a.length)];
   let items: Item[] = [];
   let count = 0;
+  let done = false;
 
   function svg(t: string[], p: string) {
     const roe = Math.random() < 0.2;
@@ -58,19 +78,42 @@ import GameLayout from '../layouts/GameLayout.astro';
   }
 
   function eat(it: Item) {
-    if (it.dead) return;
+    if (it.dead || done) return;
     it.dead = true;
     chirp(500 + (count % 8) * 80);
     it.el.classList.add('pop');
     setTimeout(() => it.el.remove(), 300);
     count++;
     cntEl.textContent = String(count);
-    if (stack.children.length < 30) {
-      const pl = document.createElement('div');
-      pl.className = 'plate';
-      pl.style.background = it.p;
-      stack.appendChild(pl);
+    const pl = document.createElement('div');
+    pl.className = 'plate';
+    pl.style.background = it.p;
+    stack.appendChild(pl);
+    if (count === GOAL) {
+      done = true;
+      setTimeout(finish, 400);
     }
+  }
+
+  /** おなかいっぱい。流れているお寿司を片付け、積んだお皿は残して数えられるようにする */
+  function finish() {
+    for (const it of items) { it.dead = true; it.el.remove(); }
+    items = [];
+    full.hidden = false;
+    stack.classList.add('done');
+    [523, 659, 784].forEach((f) => tone(f, 0, 0.6, 0.12));
+    tone(1047, 0.12, 0.7, 0.12);
+    speak('おなかいっぱい！', 'ごちそうさまでした');
+  }
+
+  function reset() {
+    if (done && full.hidden) return; // finish 待ちの間は無視する
+    done = false;
+    count = 0;
+    cntEl.textContent = '0';
+    stack.innerHTML = '';
+    stack.classList.remove('done');
+    full.hidden = true;
   }
 
   function loop() {
@@ -85,8 +128,9 @@ import GameLayout from '../layouts/GameLayout.astro';
     requestAnimationFrame(loop);
   }
 
-  setInterval(() => { if (items.length < 5) spawn(); }, 1300);
+  setInterval(() => { if (!done && items.length < 5) spawn(); }, 1300);
   spawn();
   loop();
-  onTap('#rst', () => { count = 0; cntEl.textContent = '0'; stack.innerHTML = ''; });
+  onTap('#rst', reset);
+  onTap('#again', reset);
 </script>
