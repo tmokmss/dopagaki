@@ -49,6 +49,25 @@ import GameLayout from '../layouts/GameLayout.astro';
     font-size: 22px;
   }
   .piece.hop { animation: khop .35s ease-out; }
+  .piece.grow { animation: kgrow .6s cubic-bezier(.3, 1.6, .5, 1); }
+  .cell.mystery { background: #CECBF6; color: #26215C; }
+  .cell.mystery::before {
+    content: "？";
+    position: absolute;
+    top: 6px;
+    font-size: 18px;
+    color: #534AB7;
+  }
+  .cell.mystery:has(.piece)::before { content: none; }
+
+  .confetti {
+    position: fixed;
+    z-index: 50;
+    width: 8px;
+    height: 12px;
+    border-radius: 2px;
+    pointer-events: none;
+  }
 
   #prompt {
     display: flex;
@@ -171,7 +190,26 @@ import GameLayout from '../layouts/GameLayout.astro';
   .panel .go { background: #E24B4A; font-size: 26px; padding: 14px 40px; }
   .panel .again { font-size: 14px; color: var(--text-secondary); }
 
+  /* ゴールのお祝い: 10 こを 5 こずつ 2 列 */
+  .party { height: 100%; display: grid; grid-template: repeat(2, 1fr) / repeat(5, 1fr); align-items: center; justify-items: center; }
+  .party .obj { font-size: min(13cqw, 28cqh); }
+  .party .obj.popped .face { animation: kpop .3s ease-out; }
+  .party.all .obj { animation: kjump .5s ease-out; }
+
+  /* ？マスのくす玉 */
+  .kusudama {
+    border: 0;
+    background: transparent;
+    font-family: "Apple Color Emoji", "Noto Color Emoji", "Segoe UI Emoji", sans-serif;
+    font-size: min(40cqw, 45cqh);
+    line-height: 1;
+    animation: kwobble 1.2s ease-in-out infinite;
+  }
+  .kusudama.open { animation: kpop .4s ease-out; }
+
   @keyframes kpop { from { transform: scale(.4); } to { transform: none; } }
+  @keyframes kgrow { 0% { transform: scale(1); } 40% { transform: scale(1.6); } 100% { transform: scale(1); } }
+  @keyframes kwobble { 25% { transform: rotate(-8deg); } 75% { transform: rotate(8deg); } }
   @keyframes khop { 0% { transform: translateY(0); } 50% { transform: translateY(-12px); } 100% { transform: translateY(0); } }
   @keyframes kjump { 50% { transform: translateY(-14%); } }
   @keyframes kpulse { 50% { opacity: .55; } }
@@ -188,7 +226,19 @@ import GameLayout from '../layouts/GameLayout.astro';
 
   const WORD = ['ぜろ', 'いち', 'に', 'さん', 'よん', 'ご', 'ろく', 'なな', 'はち', 'きゅう', 'じゅう'];
   // 助数詞は「こ」にそろえる (数え方が混ざると 3 歳には負担なので、どれも「こ」で数えられる物にする)
-  const KO = ['', 'いっこ', 'にこ', 'さんこ', 'よんこ', 'ごこ', 'ろっこ', 'ななこ'];
+  const KO = ['', 'いっこ', 'にこ', 'さんこ', 'よんこ', 'ごこ', 'ろっこ', 'ななこ', 'はっこ', 'きゅうこ', 'じゅっこ'];
+  // 数えるたびに 1 音ずつ上がる (ド レ ミ ファ ソ ラ シ ド レ ミ)。数が増える = 音が高くなる
+  const SCALE = [0, 523, 587, 659, 698, 784, 880, 988, 1047, 1175, 1319];
+  // ゴールで出てくるもの。毎回ちがうものにする (予告しないので、ごほうび目当てにはならない)
+  interface Party { emo: string; name: string; verb: string; out: string[] }
+  const PARTIES: Party[] = [
+    { emo: '🎈', name: 'ふうせん', verb: 'わろう', out: ['💥'] },
+    { emo: '🫧', name: 'しゃぼんだま', verb: 'わろう', out: ['✨'] },
+    { emo: '🥚', name: 'たまご', verb: 'わってみよう', out: ['🐣', '🐥', '🐢', '🦖', '🐊', '🦎', '🐧', '🐍'] },
+    { emo: '🎁', name: 'プレゼント', verb: 'あけよう', out: ['🧸', '🚗', '⚽', '🪀', '🍭', '🎨', '🚀', '🦕'] },
+  ];
+  // コマは進むほど育つ
+  const face = (p: number) => (p === 0 ? '🥚' : p < 4 ? '🐣' : p < 7 ? '🐤' : p < GOAL ? '🐥' : '🐔');
   const ITEMS: Item[] = [
     ['🍎', 'りんご'], ['🍓', 'いちご'], ['🍊', 'みかん'], ['🍙', 'おにぎり'],
     ['🍩', 'ドーナツ'], ['🍪', 'クッキー'], ['🍬', 'あめ'], ['⭐', 'ほし'],
@@ -233,6 +283,8 @@ import GameLayout from '../layouts/GameLayout.astro';
     /** 数に関係なく最近の結果 */
     recent: number[];
     last?: string;
+    /** 前回のゴールで出したもの (PARTIES の番号) */
+    party?: number;
   }
   const KEY = 'kazu:v1';
   let S: Save = { max: 3, hist: {}, recent: [] };
@@ -283,13 +335,41 @@ import GameLayout from '../layouts/GameLayout.astro';
       await sleep(400 + texts.join('').length * 80);
     }
   }
+  const note = (k: number) => tone(SCALE[Math.min(k, SCALE.length - 1)], 0, 0.25, 0.18);
   function sayNum(k: number) {
-    if (!speak(WORD[k])) tone(392 * 2 ** (k / 6));
+    note(k);
+    speak(WORD[k]);
   }
   async function sayNumWait(k: number) {
-    if (!(await speakWait(WORD[k]))) {
-      tone(392 * 2 ** (k / 6));
-      await sleep(450);
+    note(k);
+    if (!(await speakWait(WORD[k]))) await sleep(450);
+  }
+
+  /** 和音と紙吹雪。「ぜんぶで ○こ」の瞬間に出す */
+  const COLORS = ['#E24B4A', '#EF9F27', '#639922', '#378ADD', '#D4537E', '#7F5BC7', '#FAC775'];
+  function celebrate(from: Element = stage, count = 36) {
+    [523, 659, 784].forEach((f) => tone(f, 0, 0.6, 0.12));
+    tone(1047, 0.12, 0.7, 0.12);
+    const r = from.getBoundingClientRect();
+    const x = r.left + r.width / 2, y = r.top + r.height / 2;
+    for (let i = 0; i < count; i++) {
+      const p = el('i', 'confetti');
+      p.style.left = `${x}px`;
+      p.style.top = `${y}px`;
+      p.style.background = COLORS[i % COLORS.length];
+      document.body.append(p);
+      // 上に飛び散ってから落ちる
+      const a = (-160 + Math.random() * 140) * (Math.PI / 180);
+      const v = 120 + Math.random() * 220;
+      const dx = Math.cos(a) * v, dy = Math.sin(a) * v;
+      p.animate(
+        [
+          { transform: 'translate(0, 0) rotate(0deg)', opacity: 1 },
+          { transform: `translate(${dx * 0.7}px, ${dy}px) rotate(${rand(360)}deg)`, opacity: 1, offset: 0.35 },
+          { transform: `translate(${dx}px, ${dy + 380}px) rotate(${rand(720)}deg)`, opacity: 0 },
+        ],
+        { duration: 1300 + rand(600), easing: 'ease-out' },
+      ).onfinish = () => p.remove();
     }
   }
 
@@ -335,11 +415,28 @@ import GameLayout from '../layouts/GameLayout.astro';
     board.append(c);
     cells.push(c);
   }
-  const piece = el('span', 'piece', '🐣');
+  const piece = el('span', 'piece', face(0));
   let pos = 0;
   function place() {
     cells[pos].append(piece);
     cells.forEach((c, i) => c.classList.toggle('passed', i > 0 && i <= pos && i < GOAL));
+    const f = face(pos);
+    if (piece.textContent === f) return;
+    piece.textContent = f;
+    // 育ったら少し大きく弾ませる (はじめからやり直すときは弾ませない)
+    if (pos > 0) {
+      piece.classList.remove('hop');
+      restart(piece, 'grow');
+      chirp(700, 1500);
+    }
+  }
+
+  // ？マス。止まらなくても、通ったらくす玉が出る
+  let mystery = -1;
+  function setMystery(i: number) {
+    cells.forEach((c) => c.classList.remove('mystery'));
+    mystery = i;
+    if (i > 0) cells[i].classList.add('mystery');
   }
 
   let boardWaiter: (() => void) | null = null;
@@ -354,16 +451,37 @@ import GameLayout from '../layouts/GameLayout.astro';
     stage.classList.add('dim');
     setPrompt(n, `${n} すすもう`, [`${WORD[n]} すすもう`], true);
     speak(`${WORD[n]} すすもう`);
+    let hit = false;
     for (let s = 0; s < n && pos < GOAL; s++) {
       cells[pos + 1].classList.add('next');
       await new Promise<void>((r) => (boardWaiter = r));
       cells[pos + 1].classList.remove('next');
       pos++;
-      place();
+      piece.classList.remove('grow');
       restart(piece, 'hop');
+      place();
       sayNum(pos);
+      if (pos === mystery) hit = true;
     }
     await sleep(800);
+    if (hit) await mysteryEvent();
+  }
+
+  /** ？マスのくす玉。タップすると割れて、中身を数える */
+  async function mysteryEvent() {
+    setMystery(-1);
+    setPrompt(null, 'なにが はいってるかな？', ['なにが はいってるかな？']);
+    const p = el('div', 'panel');
+    const ball = el('button', 'kusudama', '🎁');
+    p.append(ball);
+    show(p);
+    speak(...promptTalk);
+    await new Promise<void>((r) => onTap(ball, () => r()));
+    ball.textContent = '🎊';
+    restart(ball, 'open');
+    celebrate(ball);
+    await sleep(1200);
+    await countTask(1 + rand(S.max), ITEMS[rand(ITEMS.length)]);
   }
 
   // ---- 課題 ----
@@ -400,7 +518,7 @@ import GameLayout from '../layouts/GameLayout.astro';
     row.classList.add('all');
     res.innerHTML = `<b>${n}</b>${hand(n)}<span>ぜんぶで ${n}こ</span>`;
     res.classList.add('show');
-    chirp(600);
+    celebrate(res);
     await say(`ぜんぶで ${KO[n]}`);
     await sleep(500);
   }
@@ -452,6 +570,7 @@ import GameLayout from '../layouts/GameLayout.astro';
     pinpon();
     await sleep(1000);
     await countAloud(dots(right));
+    celebrate(right);
     await say(KO[n]);
     return first;
   }
@@ -499,6 +618,7 @@ import GameLayout from '../layouts/GameLayout.astro';
         pinpon();
         await sleep(1000);
         await countAloud(onPlate());
+        celebrate(plate);
         await say(KO[n]);
         return attempt === 0;
       }
@@ -532,6 +652,7 @@ import GameLayout from '../layouts/GameLayout.astro';
   async function session() {
     pos = 0;
     place();
+    setMystery(4 + rand(5));
     const order: Task[] = ['count', 'choose', 'give'];
     let prev = 0, prevItem = -1;
     // 1 つ課題ができるたびに、その数だけすごろくを進める。10 に着いたらおしまい (1 回 3〜5 分)
@@ -546,9 +667,48 @@ import GameLayout from '../layouts/GameLayout.astro';
       else record(n, task === 'choose' ? await chooseTask(n, ITEMS[ii]) : await giveTask(n, ITEMS[ii]));
       await advance(n);
     }
+    await party();
     S.last = today();
     save();
     finish();
+  }
+
+  /** ゴールのお祝い。10 こをタップして割りながら「いち、に…じゅう」と数える */
+  async function party() {
+    let pi;
+    do pi = rand(PARTIES.length); while (pi === S.party);
+    S.party = pi;
+    const { emo, name, verb, out } = PARTIES[pi];
+    setPrompt(null, `${name}を ${verb}`, [`ゴール！ ${name}を ${verb}`]);
+    const wrap = el('div', 'party');
+    show(wrap);
+    celebrate(board, 50);
+    speak(...promptTalk);
+
+    let c = 0;
+    await new Promise<void>((resolve) => {
+      for (let i = 0; i < GOAL; i++) {
+        const b = el('button', 'obj');
+        const f = el('span', 'face', emo);
+        b.append(f);
+        onTap(b, () => {
+          if (b.dataset.k) return sayNum(+b.dataset.k);
+          b.dataset.k = String(++c);
+          b.classList.add('counted', 'popped');
+          f.textContent = out[rand(out.length)];
+          b.append(el('span', 'badge', String(c)));
+          sayNum(c);
+          if (c === GOAL) resolve();
+        });
+        wrap.append(b);
+      }
+    });
+
+    await sleep(700);
+    wrap.classList.add('all');
+    celebrate(wrap, 70);
+    await say(`ぜんぶで ${KO[GOAL]}！`);
+    await sleep(600);
   }
 
   function finish() {
@@ -569,9 +729,10 @@ import GameLayout from '../layouts/GameLayout.astro';
   function title() {
     pos = 0;
     place();
+    setMystery(-1);
     setPrompt(null, 'かずあそび', ['かずあそび']);
     const p = el('div', 'panel');
-    p.append(el('div', 'emo', '🐣'));
+    p.append(el('div', 'emo', face(0)));
     const go = el('button', 'go', 'はじめる');
     onTap(go, start);
     p.append(go);
