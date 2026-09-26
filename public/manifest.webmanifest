@@ -1,0 +1,15 @@
+{
+  "name": "こどもの待ち時間ゲーム",
+  "short_name": "まちじかん",
+  "start_url": "/omocha/",
+  "scope": "/omocha/",
+  "display": "standalone",
+  "background_color": "#FAF9F5",
+  "theme_color": "#FAF9F5",
+  "lang": "ja",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml" },
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

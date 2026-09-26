@@ -38,22 +38,41 @@ npm run preview  # ビルド結果を確認
 ```
 src/
   games.ts                 ゲーム一覧(トップページに並ぶ)
-  layouts/GameLayout.astro 共通の <head>、色変数、ダークモード、ボタン、もどるリンク
+  layouts/GameLayout.astro 共通の <head>、色変数、ダークモード、ボタン、もどるリンク、画面固定
+  lib/tap.ts               子ども向けタップ処理 onTap (pointerdown で反応)
   lib/audio.ts             Web Audio の共通処理 (tone / chirp)
+  lib/speech.ts            読み上げ (speechSynthesis)。質の高い日本語の声を選ぶ
   lib/url.ts               base (/omocha/) を考慮したリンク生成
   pages/index.astro        トップページ
   pages/<slug>.astro       各ゲーム
+public/                    PWA の manifest とアイコン
 ```
 
 ### ゲームの追加手順
 
 1. `src/pages/<slug>.astro` を作る。`GameLayout` で包み、ロジックは `<script>` に書く(TypeScript 可)
    - JS で動的に作る要素のスタイルは Astro のスコープが効かないので `<style is:global>` に書く
-   - 音は `../lib/audio` の `tone()` / `chirp()` を使う
+   - 音は `../lib/audio` の `tone()` / `chirp()`、読み上げは `../lib/speech` の `speak()` を使う
 2. `src/games.ts` に 1 件追加する
+
+### タップとレイアウトのルール
+
+子どもの指はタップ中にずれやすく、ブラウザにスクロール扱いされてタップが効かないことがある。全ゲーム共通で次のようにしている。
+
+- **タップは `onTap()` で受ける。`click` は使わない**
+  - `click` は指が少し動くと発火しないため。`onTap` は触れた瞬間 (`pointerdown`) に反応する
+  - `onTap('.btn', (el) => ...)` のようにセレクタ・要素・要素の集まりを渡せる
+- **ゲーム画面はスクロールしない**
+  - `GameLayout` は既定で画面ぴったりに固定し、スクロール・ズーム・iOS のバウンス・長押しメニューを止める
+  - `main` は縦並びの flex。残りの高さを埋めたい要素に `class="grow"` を付け、小さい画面(iPhone SE: 375×667)でもはみ出さないようにする
+  - スクロールが必要なページ(トップなど)だけ `<GameLayout scroll>` にする
+- **ホーム画面に追加して遊ぶのがおすすめ**
+  - Safari の端スワイプで「戻る」してしまう事故は Web 側では防げない。ホーム画面に追加すると全画面(standalone)で開くので起きない
+  - さらに確実にしたいときは iPhone の「アクセスガイド」、Android の「アプリ固定」を使う
 
 ### メモ
 
 - 音は最初のタップで AudioContext を作るので、iOS の自動再生制限には引っかからない
+- 読み上げは端末の声に依存する。Mac/iOS は「設定 → アクセシビリティ → 読み上げコンテンツ」で Kyoko(拡張) や O-ren(プレミアム) を入れると音質が上がる
 - iPhone ではマナーモード(消音スイッチ)だと Web Audio の音が出ないことがある
 - お店で遊ぶので音量は小さめ推奨

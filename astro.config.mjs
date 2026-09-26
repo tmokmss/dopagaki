@@ -6,4 +6,6 @@ export default defineConfig({
   site: 'https://tmokmss.github.io',
   base: '/omocha',
   trailingSlash: 'always',
+  // 画面下に出る開発用ツールバーは、ローカルで子どもが遊ぶときの誤タップのもとになるので出さない
+  devToolbar: { enabled: false },
 });
