@@ -5,7 +5,6 @@ import GameLayout from '../layouts/GameLayout.astro';
   <div id="board" aria-label="すごろく"></div>
   <button id="prompt" aria-label="もういちど きく"><span id="pnum"></span><span id="ptext"></span></button>
   <div id="stage" class="grow"></div>
-  <p id="hint"></p>
 </GameLayout>
 
 <!--
@@ -73,13 +72,6 @@ import GameLayout from '../layouts/GameLayout.astro';
 
   #stage { container-type: size; }
   #stage.dim > * { opacity: .45; }
-  #hint {
-    height: 2.8em;
-    margin: 8px 0 0;
-    font-size: 13px;
-    line-height: 1.4;
-    color: var(--text-secondary);
-  }
 
   .obj {
     position: relative;
@@ -208,7 +200,7 @@ import GameLayout from '../layouts/GameLayout.astro';
 
   const $ = (id: string) => document.getElementById(id)!;
   const board = $('board'), promptEl = $('prompt'), pnum = $('pnum'), ptext = $('ptext');
-  const stage = $('stage'), hint = $('hint');
+  const stage = $('stage');
 
   const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
   const rand = (n: number) => Math.floor(Math.random() * n);
@@ -320,7 +312,6 @@ import GameLayout from '../layouts/GameLayout.astro';
   }
   onTap(promptEl, () => promptTalk.length && speak(...promptTalk));
 
-  const setHint = (t: string) => (hint.textContent = t);
   function show(node: HTMLElement) {
     stage.classList.remove('dim');
     stage.replaceChildren(node);
@@ -362,7 +353,6 @@ import GameLayout from '../layouts/GameLayout.astro';
   async function advance(n: number) {
     stage.classList.add('dim');
     setPrompt(n, `${n} すすもう`, [`${WORD[n]} すすもう`], true);
-    setHint('すごろくをタップすると 1 マスずつ進みます。「ご、ろく、なな」と今いるマスから数えます');
     speak(`${WORD[n]} すすもう`);
     for (let s = 0; s < n && pos < GOAL; s++) {
       cells[pos + 1].classList.add('next');
@@ -381,7 +371,6 @@ import GameLayout from '../layouts/GameLayout.astro';
   /** かぞえる: 物を 1 つずつタップして数え、最後に「ぜんぶで ○こ」と数字・指といっしょに見せる */
   async function countTask(n: number, [emo, name]: Item) {
     setPrompt(null, `${name}を かぞえよう`, [`${name}を かぞえよう`]);
-    setHint('いっしょに指さして「いち、に…」と数えてみてください');
     const wrap = el('div', 'count'), row = el('div', 'row'), res = el('div', 'result');
     wrap.append(row, res);
     show(wrap);
@@ -423,7 +412,6 @@ import GameLayout from '../layouts/GameLayout.astro';
     const vals = shuffle([n, ...others.slice(0, k - 1)]);
     const talk = `${KO[n]} は どれ？`;
     setPrompt(n, `${n}こ は どれ？`, [talk]);
-    setHint('まちがえても大丈夫です。一緒に数え直してから、もう一度選びます');
 
     const wrap = el('div', `choose k${k}`);
     let pick: ((c: HTMLElement) => void) | null = null;
@@ -472,7 +460,6 @@ import GameLayout from '../layouts/GameLayout.astro';
   async function giveTask(n: number, [emo, name]: Item) {
     const talk = `${name}を ${KO[n]} ちょうだい`;
     setPrompt(n, `${name}を ${n}こ ちょうだい`, [talk]);
-    setHint('ひとつずつお皿に載せて、載せたら「はい どうぞ」。お皿の物を触ると戻せます');
 
     const wrap = el('div', 'give'), pile = el('div', 'pile'), plate = el('div', 'plate');
     const ok = el('button', 'ok', 'はい どうぞ');
@@ -566,7 +553,6 @@ import GameLayout from '../layouts/GameLayout.astro';
 
   function finish() {
     setPrompt(null, 'ゴール！', ['ゴール！ きょうは おしまい。 また あしたね']);
-    setHint('');
     const p = el('div', 'panel');
     p.append(
       el('div', 'emo', '🎉'),
@@ -584,7 +570,6 @@ import GameLayout from '../layouts/GameLayout.astro';
     pos = 0;
     place();
     setPrompt(null, 'かずあそび', ['かずあそび']);
-    setHint('おうちの人と一緒に遊んでください。「いくつかな？」と声をかけると、より身につきます');
     const p = el('div', 'panel');
     p.append(el('div', 'emo', '🐣'));
     const go = el('button', 'go', 'はじめる');
