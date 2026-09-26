@@ -20,7 +20,7 @@ async function walk(dir: string): Promise<string[]> {
 export default function serviceWorker(): AstroIntegration {
   let base = '/';
   return {
-    name: 'omocha-service-worker',
+    name: 'dopagaki-service-worker',
     hooks: {
       'astro:config:done': ({ config }) => {
         base = config.base.endsWith('/') ? config.base : config.base + '/';
@@ -41,7 +41,7 @@ export default function serviceWorker(): AstroIntegration {
         const version = hash.update(SW_BODY).digest('hex').slice(0, 12);
 
         const sw = `// 自動生成 (integrations/service-worker.ts)
-const CACHE = 'omocha-${version}';
+const CACHE = 'dopagaki-${version}';
 const URLS = ${JSON.stringify(urls)};
 ${SW_BODY}`;
         await writeFile(join(root, 'sw.js'), sw);
@@ -62,7 +62,7 @@ self.addEventListener('install', (e) => {
 self.addEventListener('activate', (e) => {
   e.waitUntil(
     caches.keys()
-      .then((keys) => Promise.all(keys.filter((k) => k.startsWith('omocha-') && k !== CACHE).map((k) => caches.delete(k))))
+      .then((keys) => Promise.all(keys.filter((k) => k.startsWith('dopagaki-') && k !== CACHE).map((k) => caches.delete(k))))
       .then(() => self.clients.claim()),
   );
 });
