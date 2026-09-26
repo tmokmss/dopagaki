@@ -101,6 +101,34 @@ const { title, back = true, scroll = false } = Astro.props;
     addEventListener('resize', show);
     visualViewport?.addEventListener('resize', show);
   }
+
+  // 開発中と ?debug のときは、画面や .grow の中身がはみ出したら赤い警告を出す。
+  // 低い画面でボタンが切れる、積んだものが見えなくなる、といった崩れを作っている最中に気づくため。
+  // わざと切っている要素 (あふれた分は見えなくてよいもの) には data-clip を付けると対象外になる
+  if (document.documentElement.classList.contains('fit') && (import.meta.env.DEV || new URLSearchParams(location.search).has('debug'))) {
+    const main = document.querySelector('main')!;
+    const bar = document.createElement('div');
+    bar.style.cssText = 'position:fixed;left:0;right:0;bottom:0;z-index:9999;padding:6px 8px;font:12px/1.4 monospace;background:#E24B4A;color:#fff;pointer-events:none;white-space:pre-wrap';
+    let last = '';
+    const name = (el: Element) => el.tagName.toLowerCase() + (el.id ? '#' + el.id : '') + [...el.classList].map((c) => '.' + c).join('');
+    const check = () => {
+      const bad: string[] = [];
+      const over = main.getBoundingClientRect().bottom - innerHeight;
+      if (over > 1) bad.push(`main が画面の下に ${Math.round(over)}px はみ出し`);
+      if (main.scrollHeight > main.clientHeight + 1) bad.push(`main の中身が ${main.scrollHeight - main.clientHeight}px はみ出し`);
+      main.querySelectorAll<HTMLElement>(':scope > .grow, .grow *').forEach((el) => {
+        if (el.closest('[data-clip]')) return;
+        // .grow の中は、はみ出しを切る要素 (overflow: hidden など) だけを見る
+        if (!el.classList.contains('grow') && getComputedStyle(el).overflowY === 'visible') return;
+        if (el.scrollHeight > el.clientHeight + 1) bad.push(`${name(el)} の中身が ${el.scrollHeight - el.clientHeight}px はみ出し`);
+      });
+      const msg = bad.join('\n');
+      if (msg === last) return;
+      last = msg;
+      if (msg) { console.warn('[layout]', msg); bar.textContent = msg; document.body.appendChild(bar); } else bar.remove();
+    };
+    setInterval(check, 500);
+  }
 </script>
 
 <style is:global>
