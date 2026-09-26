@@ -1,0 +1,98 @@
+---
+import GameLayout from '../layouts/GameLayout.astro';
+
+const buttons = [
+  { k: 'patty', label: 'おにく', sw: 'background:#633806' },
+  { k: 'cheese', label: 'チーズ', sw: 'background:#FAC775' },
+  { k: 'lettuce', label: 'レタス', sw: 'background:#639922' },
+  { k: 'tomato', label: 'トマト', sw: 'background:#E24B4A' },
+  { k: 'onion', label: 'たまねぎ', sw: 'background:#F1EFE8;border:0.5px solid #B4B2A9' },
+  { k: 'top', label: 'ふた', sw: 'background:#EF9F27;border-radius:10px 10px 4px 4px' },
+];
+---
+<GameLayout title="ハンバーガーづくり">
+  <div class="hud">
+    <span>できた: <span id="cnt">0</span> こ</span>
+    <span id="msg"></span>
+  </div>
+  <div class="board">
+    <div id="stack"></div>
+    <div class="tray"></div>
+  </div>
+  <div class="grid">
+    {buttons.map((b) => (
+      <button class:list={['bb', { lid: b.k === 'top' }]} data-k={b.k}>
+        <span class="sw" style={b.sw}></span>{b.label}
+      </button>
+    ))}
+  </div>
+</GameLayout>
+
+<style is:global>
+  #msg { color: var(--text-success); }
+  .board { height: 300px; border-radius: 12px; background: var(--surface-1); display: flex; flex-direction: column; justify-content: flex-end; padding-bottom: 16px; overflow: hidden; }
+  #stack { display: flex; flex-direction: column-reverse; width: 200px; margin: 0 auto; }
+  .tray { width: 240px; height: 10px; border-radius: 5px; background: #D3D1C7; margin: 2px auto 0; }
+  .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 14px; }
+  .pc { margin: 0 auto; animation: drop .35s ease-out; }
+  @keyframes drop { from { transform: translateY(-140px); opacity: .3 } to { transform: translateY(0); opacity: 1 } }
+  .done { animation: yay .6s ease-in-out 2; }
+  @keyframes yay { 50% { transform: scale(1.15) rotate(-4deg) } }
+  .bb { height: 64px; padding: 0; font-size: 18px; display: flex; align-items: center; justify-content: center; gap: 10px; }
+  .bb.lid { border: 2px solid var(--border-accent); }
+  .sw { width: 30px; height: 14px; border-radius: 5px; }
+</style>
+
+<script>
+  import { tone } from '../lib/audio';
+
+  interface Piece { h: number; w: number; bg: string; r: string; f: number; bd?: string }
+  const P: Record<string, Piece> = {
+    bottom: { h: 24, w: 180, bg: '#EF9F27', r: '4px 4px 14px 14px', f: 330 },
+    patty: { h: 22, w: 190, bg: '#633806', r: '11px', f: 220 },
+    cheese: { h: 8, w: 200, bg: '#FAC775', r: '2px', f: 440 },
+    lettuce: { h: 12, w: 205, bg: '#639922', r: '6px', f: 500 },
+    tomato: { h: 12, w: 170, bg: '#E24B4A', r: '6px', f: 560 },
+    onion: { h: 8, w: 160, bg: '#F1EFE8', r: '4px', f: 620, bd: '1px solid #B4B2A9' },
+    top: { h: 48, w: 185, bg: '#EF9F27', r: '90px 90px 8px 8px', f: 0 },
+  };
+  const stack = document.getElementById('stack')!;
+  const cnt = document.getElementById('cnt')!;
+  const msg = document.getElementById('msg')!;
+  let n = 0, busy = false;
+
+  function add(k: string) {
+    const p = P[k], d = document.createElement('div');
+    d.className = 'pc';
+    d.style.cssText = `height:${p.h}px;width:${p.w}px;background:${p.bg};border-radius:${p.r};margin-top:2px;position:relative;${p.bd ? 'border:' + p.bd : ''}`;
+    if (k === 'top') {
+      const seeds = [[50, 14], [80, 8], [110, 10], [135, 18], [65, 26], [100, 24]]
+        .map(([x, y]) => `<span style="position:absolute;left:${x}px;top:${y}px;width:7px;height:4px;border-radius:2px;background:#FAEEDA"></span>`).join('');
+      const eyes = [70, 108].map((x) => `<span style="position:absolute;left:${x}px;top:30px;width:6px;height:6px;border-radius:3px;background:#412402"></span>`).join('');
+      d.innerHTML = seeds + eyes;
+    }
+    stack.appendChild(d);
+  }
+
+  function reset() { stack.innerHTML = ''; msg.textContent = ''; add('bottom'); busy = false; }
+
+  document.querySelectorAll<HTMLButtonElement>('.bb').forEach((b) => b.addEventListener('click', () => {
+    if (busy) return;
+    const k = b.dataset.k!;
+    if (k !== 'top' && stack.children.length >= 14) return;
+    add(k);
+    if (k === 'top') {
+      busy = true;
+      n++;
+      cnt.textContent = String(n);
+      msg.textContent = 'いただきます!';
+      [523, 659, 784, 1047].forEach((f, i) => tone(f, i * 0.12, 0.2));
+      stack.classList.remove('done');
+      void stack.offsetWidth;
+      stack.classList.add('done');
+      setTimeout(reset, 1800);
+    } else tone(P[k].f);
+  }));
+
+  reset();
+</script>

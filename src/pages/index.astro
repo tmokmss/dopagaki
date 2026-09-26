@@ -1,0 +1,42 @@
+---
+import GameLayout from '../layouts/GameLayout.astro';
+import { games } from '../games';
+import { href } from '../lib/url';
+---
+<GameLayout title="こどもの待ち時間ゲーム" back={false}>
+  <h1>まちじかん ゲーム</h1>
+  <ul class="list">
+    {games.map((g) => (
+      <li>
+        <a href={href(`${g.slug}/`)}>
+          <span class="icon">{g.icon}</span>
+          <span>
+            <span class="title">{g.title}</span>
+            <span class="desc">{g.place} ・ {g.description}</span>
+          </span>
+        </a>
+      </li>
+    ))}
+  </ul>
+  <p class="note">音が出ないときは、iPhone のマナーモードを切ってください。お店では音量小さめで。</p>
+</GameLayout>
+
+<style>
+  h1 { font-size: 24px; font-weight: 500; margin: 8px 0 16px; }
+  .list { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
+  a {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 14px;
+    border-radius: 12px;
+    background: var(--surface-1);
+    color: inherit;
+    text-decoration: none;
+  }
+  a:active { transform: scale(.98); }
+  .icon { font-size: 44px; line-height: 1; }
+  .title { display: block; font-size: 20px; font-weight: 500; }
+  .desc { display: block; font-size: 13px; color: var(--text-secondary); margin-top: 4px; }
+  .note { font-size: 12px; color: var(--text-secondary); margin-top: 20px; }
+</style>

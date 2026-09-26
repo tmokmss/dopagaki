@@ -1,0 +1,89 @@
+---
+import { href } from '../lib/url';
+
+interface Props {
+  title: string;
+  /** false にするとトップへ戻るリンクを出さない */
+  back?: boolean;
+}
+const { title, back = true } = Astro.props;
+---
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#FAF9F5" />
+    <title>{title}</title>
+  </head>
+  <body>
+    <main>
+      {back && <a class="back" href={href()} aria-label="もどる">‹ もどる</a>}
+      <slot />
+    </main>
+  </body>
+</html>
+
+<style is:global>
+  :root {
+    --surface-0: #FAF9F5;
+    --surface-1: #F1EFE8;
+    --text-primary: #1F1E1C;
+    --text-secondary: #5F5E5A;
+    --text-success: #3B6D11;
+    --border-strong: rgba(0, 0, 0, .2);
+    --border-accent: #378ADD;
+    --radius: 8px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --surface-0: #1F1E1C;
+      --surface-1: #2C2C2A;
+      --text-primary: #F1EFE8;
+      --text-secondary: #B4B2A9;
+      --text-success: #97C459;
+      --border-strong: rgba(255, 255, 255, .25);
+      --border-accent: #85B7EB;
+    }
+  }
+  * {
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  body {
+    margin: 0;
+    padding: calc(16px + env(safe-area-inset-top, 0px)) 16px calc(16px + env(safe-area-inset-bottom, 0px));
+    font-family: system-ui, -apple-system, "Hiragino Sans", sans-serif;
+    color: var(--text-primary);
+    background: var(--surface-0);
+  }
+  main { max-width: 520px; margin: 0 auto; }
+  button {
+    font: inherit;
+    color: inherit;
+    background: transparent;
+    border: 0.5px solid var(--border-strong);
+    border-radius: var(--radius);
+    padding: 8px 14px;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+  button:active { transform: scale(.98); }
+  .back {
+    display: inline-block;
+    margin-bottom: 8px;
+    font-size: 14px;
+    color: var(--text-secondary);
+    text-decoration: none;
+  }
+  .hud {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+    font-size: 22px;
+    font-weight: 500;
+  }
+</style>

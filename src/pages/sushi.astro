@@ -1,0 +1,90 @@
+---
+import GameLayout from '../layouts/GameLayout.astro';
+---
+<GameLayout title="かいてんずし">
+  <div class="hud">
+    <span>たべた: <span id="cnt">0</span> さら</span>
+    <button id="rst" style="font-size:16px;font-weight:400">もういちど</button>
+  </div>
+  <div id="lane">
+    <div class="belt"></div>
+  </div>
+  <div id="stack"></div>
+</GameLayout>
+
+<style is:global>
+  #lane { position: relative; height: 280px; border-radius: 12px; background: var(--surface-1); overflow: hidden; }
+  #lane .belt { position: absolute; left: 0; right: 0; top: 70px; height: 110px; background: #B4B2A9; border-top: 6px solid #888780; border-bottom: 6px solid #888780; }
+  #stack { display: flex; flex-direction: column-reverse; align-items: center; min-height: 40px; margin-top: 16px; }
+  .sushi { position: absolute; width: 84px; height: 84px; cursor: pointer; touch-action: manipulation; transition: transform .15s; }
+  .sushi.pop { transform: scale(1.5); opacity: 0; transition: transform .3s, opacity .3s; }
+  .plate { width: 44px; height: 10px; border-radius: 5px; margin-top: -3px; border: 0.5px solid rgba(0, 0, 0, .2); }
+</style>
+
+<script>
+  import { chirp } from '../lib/audio';
+
+  interface Item { el: HTMLDivElement; x: number; y: number; sp: number; p: string; dead?: boolean }
+
+  const lane = document.getElementById('lane')!;
+  const cntEl = document.getElementById('cnt')!;
+  const stack = document.getElementById('stack')!;
+  const tops = [['#F0997B', '#D85A30'], ['#E24B4A', '#A32D2D'], ['#FAC775', '#EF9F27'], ['#F5C4B3', '#D85A30'], ['#97C459', '#3B6D11']];
+  const plates = ['#E24B4A', '#378ADD', '#EF9F27', '#639922', '#D4537E'];
+  const pick = <T,>(a: T[]) => a[Math.floor(Math.random() * a.length)];
+  let items: Item[] = [];
+  let count = 0;
+
+  function svg(t: string[], p: string) {
+    const roe = Math.random() < 0.2;
+    const neta = roe
+      ? `<rect x="14" y="26" width="56" height="30" rx="8" fill="#2C2C2A"/><circle cx="30" cy="28" r="6" fill="#D85A30"/><circle cx="42" cy="26" r="6" fill="#D85A30"/><circle cx="54" cy="28" r="6" fill="#D85A30"/>`
+      : `<path d="M12 36 Q42 16 72 36 Q72 44 62 42 Q42 38 22 42 Q12 44 12 36Z" fill="${t[0]}" stroke="${t[1]}"/><path d="M30 30 L36 36 M42 27 L48 34 M54 30 L58 36" stroke="${t[1]}" stroke-width="2" opacity=".5"/>`;
+    return `<svg viewBox="0 0 84 84" width="84" height="84"><ellipse cx="42" cy="62" rx="38" ry="12" fill="${p}"/><ellipse cx="42" cy="59" rx="30" ry="8" fill="#F1EFE8"/><rect x="16" y="34" width="52" height="24" rx="12" fill="#FFFFFF" stroke="#D3D1C7"/>${neta}<circle cx="34" cy="48" r="2" fill="#2C2C2A"/><circle cx="50" cy="48" r="2" fill="#2C2C2A"/><path d="M37 52 Q42 56 47 52" stroke="#2C2C2A" stroke-width="2" fill="none"/></svg>`;
+  }
+
+  function spawn() {
+    const t = pick(tops), p = pick(plates);
+    const d = document.createElement('div');
+    d.className = 'sushi';
+    d.innerHTML = svg(t, p);
+    const it: Item = { el: d, x: -90, y: 72 + Math.random() * 10, sp: 1 + Math.random() * 0.8, p };
+    d.style.top = it.y + 'px';
+    d.addEventListener('pointerdown', () => eat(it));
+    lane.appendChild(d);
+    items.push(it);
+  }
+
+  function eat(it: Item) {
+    if (it.dead) return;
+    it.dead = true;
+    chirp(500 + (count % 8) * 80);
+    it.el.classList.add('pop');
+    setTimeout(() => it.el.remove(), 300);
+    count++;
+    cntEl.textContent = String(count);
+    if (stack.children.length < 30) {
+      const pl = document.createElement('div');
+      pl.className = 'plate';
+      pl.style.background = it.p;
+      stack.appendChild(pl);
+    }
+  }
+
+  function loop() {
+    const w = lane.clientWidth;
+    for (const it of items) {
+      if (it.dead) continue;
+      it.x += it.sp;
+      it.el.style.left = it.x + 'px';
+      if (it.x > w + 10) { it.dead = true; it.el.remove(); }
+    }
+    items = items.filter((i) => !i.dead);
+    requestAnimationFrame(loop);
+  }
+
+  setInterval(() => { if (items.length < 5) spawn(); }, 1300);
+  spawn();
+  loop();
+  document.getElementById('rst')!.onclick = () => { count = 0; cntEl.textContent = '0'; stack.innerHTML = ''; };
+</script>
