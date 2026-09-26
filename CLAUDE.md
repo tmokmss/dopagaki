@@ -12,7 +12,7 @@
 
 ```sh
 npm install
-npm run dev      # http://localhost:4321/omocha/
+npm run dev      # http://localhost:4321/dopagaki/
 npm run build    # 型チェック + dist/ に静的出力
 npm run preview  # ビルド結果を確認
 ```
