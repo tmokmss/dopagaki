@@ -1,0 +1,331 @@
+---
+import GameLayout from '../layouts/GameLayout.astro';
+
+const SLOTS = 6;
+---
+<GameLayout title="なぞりがき">
+  <div class="hud">
+    <div id="shelf">
+      {Array.from({ length: SLOTS }, () => <span class="slot"></span>)}
+    </div>
+  </div>
+  <div class="board grow">
+    <svg id="pad" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet">
+      <path id="guide" />
+      <path id="guide-dots" />
+      <g id="art"></g>
+      <polyline id="trace" />
+      <g id="ink"></g>
+      <circle id="ghost" r="2.2" />
+      <circle id="goal" r="4.5" />
+      <circle id="head" r="5.5" />
+    </svg>
+    <svg id="gallery" viewBox="0 0 300 200" preserveAspectRatio="xMidYMid meet" class="off"></svg>
+  </div>
+  <div class="foot">
+    <span id="msg"></span>
+    <button id="again" class="off">もういっかい</button>
+  </div>
+</GameLayout>
+
+<style is:global>
+  .off { display: none !important; }
+  .hud { margin-bottom: 8px; }
+  #shelf { display: flex; gap: 6px; }
+  .slot { width: 40px; height: 40px; border-radius: 10px; background: var(--surface-1); display: block; }
+  .slot svg { width: 100%; height: 100%; display: block; }
+  .slot.got { animation: pop .4s ease-out; }
+
+  .board { position: relative; border-radius: 12px; background: var(--surface-1); overflow: hidden; }
+  .board svg { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; }
+
+  #guide { fill: none; stroke: var(--surface-0); stroke-width: 11; stroke-linecap: round; stroke-linejoin: round; }
+  #guide-dots { fill: none; stroke: var(--border-strong); stroke-width: 2.4; stroke-linecap: round; stroke-dasharray: 0 5; }
+  #trace { fill: none; stroke-width: 7; stroke-linecap: round; stroke-linejoin: round; }
+  #ghost { fill: var(--border-accent); pointer-events: none; }
+  #goal { fill: #FAC775; stroke: #EF9F27; stroke-width: 1.2; }
+  #head { fill: #fff; stroke: var(--border-accent); stroke-width: 2; transform-box: fill-box; transform-origin: center; animation: beat 1s ease-in-out infinite; pointer-events: none; }
+  @keyframes beat { 50% { transform: scale(1.25) } }
+  .spark { pointer-events: none; animation: fade .6s ease-out forwards; }
+  @keyframes fade { to { opacity: 0; r: 0.5 } }
+
+  #art > g, #gallery > svg { transform-box: fill-box; transform-origin: center; animation: pop .5s ease-out both; }
+  @keyframes pop { 0% { transform: scale(.3); opacity: 0 } 70% { transform: scale(1.1); opacity: 1 } 100% { transform: scale(1) } }
+  .bob { transform-box: fill-box; transform-origin: center; animation: bob 1.2s ease-in-out infinite; }
+  @keyframes bob { 50% { transform: translateY(-6px) rotate(-8deg) } }
+
+  .foot { height: 64px; margin-top: 10px; display: flex; align-items: center; justify-content: center; }
+  #msg { font-size: 26px; font-weight: 500; color: var(--text-success); }
+  #again { height: 56px; padding: 0 28px; font-size: 20px; border: 2px solid var(--border-accent); }
+</style>
+
+<script>
+  import { tone } from '../lib/audio';
+  import { speak } from '../lib/speech';
+  import { onTap } from '../lib/tap';
+
+  // なぞる線はタップではなくドラッグなので、onTap ではなく pointer イベントを直接使う
+
+  interface Shape {
+    d: string;
+    color: string;
+    /** 描けたときに出てくる絵 (viewBox 0 0 100 100) */
+    art: string;
+    label: string;
+    say: string;
+  }
+
+  // 外から内へ 2 周ちょっと回るうずまき
+  const spiral = (() => {
+    const p: string[] = [];
+    for (let i = 0; i <= 200; i++) {
+      const t = i / 200, a = t * 2.25 * 2 * Math.PI, r = 30 - 26 * t;
+      p.push(`${(45 + r * Math.cos(a)).toFixed(1)} ${(55 + r * Math.sin(a)).toFixed(1)}`);
+    }
+    return 'M' + p.join(' L');
+  })();
+
+  const cloud = (x: number, y: number) =>
+    `<g fill="#fff" stroke="#D3D1C7" stroke-width=".8"><circle cx="${x - 5}" cy="${y}" r="5"/><circle cx="${x + 5}" cy="${y}" r="5"/><circle cx="${x}" cy="${y - 4}" r="6"/></g>`;
+  const sun = (x: number, y: number) => `<circle cx="${x}" cy="${y}" r="8" fill="#FAC775" stroke="#EF9F27" stroke-width="1.2"/>`;
+
+  // やさしい順
+  const SHAPES: Shape[] = [
+    {
+      d: 'M15 70 A35 35 0 0 1 85 70',
+      color: '#EF9F27',
+      art: ['#E24B4A', '#EF9F27', '#FAC775', '#639922', '#378ADD']
+        .map((c, i) => `<path d="M${9 + i * 6} 70 A${41 - i * 6} ${41 - i * 6} 0 0 1 ${91 - i * 6} 70" fill="none" stroke="${c}" stroke-width="6.5"/>`).join('')
+        + cloud(14, 72) + cloud(86, 72),
+      label: 'にじ',
+      say: '虹が できた!',
+    },
+    {
+      d: 'M10 45 Q20 32 30 45 T50 45 T70 45 T90 45',
+      color: '#378ADD',
+      art: `<path d="M10 45 Q20 32 30 45 T50 45 T70 45 T90 45 L90 88 L10 88 Z" fill="#85B7EB"/>` + sun(82, 18)
+        + `<g class="bob"><ellipse cx="48" cy="68" rx="10" ry="6" fill="#EF9F27"/><path d="M57 68 L65 62 L65 74 Z" fill="#EF9F27"/><circle cx="43" cy="66" r="1.5" fill="#412402"/></g>`,
+      label: 'うみ',
+      say: '海が できた!',
+    },
+    {
+      d: 'M10 80 L30 35 L50 70 L70 25 L90 80',
+      color: '#3B6D11',
+      art: `<polygon points="10,80 30,35 50,70 70,25 90,80" fill="#639922"/>`
+        + `<polygon points="30,35 25.6,45 28,43 30,46 32,43 35.7,45" fill="#fff"/>`
+        + `<polygon points="70,25 64.7,37 67,35 70,38 72,35 74.4,37" fill="#fff"/>` + sun(16, 20),
+      label: 'やま',
+      say: '山が できた!',
+    },
+    {
+      d: 'M50 22 A28 28 0 1 1 49.99 22',
+      color: '#A32D2D',
+      art: `<circle cx="50" cy="50" r="28" fill="#E24B4A"/><ellipse cx="40" cy="40" rx="6" ry="9" fill="#fff" opacity=".45" transform="rotate(30 40 40)"/>`
+        + `<path d="M50 23 Q51 16 54 11" fill="none" stroke="#633806" stroke-width="3" stroke-linecap="round"/>`
+        + `<ellipse cx="61" cy="15" rx="7" ry="3.5" fill="#639922" transform="rotate(-25 61 15)"/>`,
+      label: 'りんご',
+      say: 'リンゴが できた!',
+    },
+    {
+      d: 'M50 20 L82 75 L18 75 Z',
+      color: '#5F5E5A',
+      art: `<polygon points="50,20 82,75 18,75" fill="#fff"/><rect x="38" y="58" width="24" height="17" rx="2" fill="#2C2C2A"/>`
+        + `<circle cx="43" cy="47" r="2" fill="#2C2C2A"/><circle cx="57" cy="47" r="2" fill="#2C2C2A"/>`
+        + `<circle cx="39" cy="52" r="2.5" fill="#F0997B" opacity=".7"/><circle cx="61" cy="52" r="2.5" fill="#F0997B" opacity=".7"/>`,
+      label: 'おにぎり',
+      say: 'おにぎりが できた!',
+    },
+    {
+      d: spiral,
+      color: '#854F0B',
+      art: `<ellipse cx="52" cy="87" rx="40" ry="6" fill="#FAC775"/><circle cx="86" cy="76" r="9" fill="#FAC775"/>`
+        + `<path d="M84 69 L80 57 M89 69 L94 57" stroke="#FAC775" stroke-width="2.5" stroke-linecap="round"/>`
+        + `<circle cx="80" cy="57" r="2.5" fill="#FAC775"/><circle cx="94" cy="57" r="2.5" fill="#FAC775"/><circle cx="88" cy="74" r="1.6" fill="#412402"/>`
+        + `<circle cx="45" cy="55" r="31" fill="#EF9F27"/>`,
+      label: 'かたつむり',
+      say: 'カタツムリが できた!',
+    },
+  ];
+
+  // ドレミの 5 音階。なぞり進むほど高い音が鳴る
+  const NOTES = [523, 587, 659, 784, 880, 1047, 1175, 1319, 1568, 1760, 2093, 2349];
+  // 線からどれだけ離れていても「なぞれている」とみなすか・一度にどこまで先へ進めるか (viewBox の単位)
+  const TOL = 14;
+  const AHEAD = 16;
+
+  const pad = document.querySelector<SVGSVGElement>('#pad')!;
+  const gallery = document.querySelector<SVGSVGElement>('#gallery')!;
+  const guide = document.getElementById('guide')!;
+  const dots = document.getElementById('guide-dots')!;
+  const art = document.getElementById('art')!;
+  const trace = document.getElementById('trace')!;
+  const ink = document.getElementById('ink')!;
+  const ghost = document.getElementById('ghost')!;
+  const goal = document.getElementById('goal')!;
+  const head = document.getElementById('head')!;
+  const slots = document.querySelectorAll<HTMLElement>('.slot');
+  const msg = document.getElementById('msg')!;
+  const again = document.getElementById('again')!;
+
+  type Pt = { x: number; y: number };
+  let pts: Pt[] = [];
+  let prog = 0, note = -1, idx = 0, busy = false;
+  const last = new Map<number, Pt>();
+
+  function load(i: number) {
+    const s = SHAPES[i];
+    idx = i;
+    guide.setAttribute('d', s.d);
+    dots.setAttribute('d', s.d);
+    const path = guide as unknown as SVGPathElement;
+    const len = path.getTotalLength();
+    pts = [];
+    for (let l = 0; l <= len; l += 1) {
+      const p = path.getPointAtLength(l);
+      pts.push({ x: p.x, y: p.y });
+    }
+    art.innerHTML = '';
+    trace.setAttribute('stroke', s.color);
+    trace.setAttribute('points', '');
+    const end = pts[pts.length - 1];
+    goal.setAttribute('cx', String(end.x));
+    goal.setAttribute('cy', String(end.y));
+    [guide, dots, goal, head, ghost].forEach((el) => el.removeAttribute('visibility'));
+    prog = 0;
+    note = -1;
+    busy = false;
+    msg.textContent = '';
+    moveHead();
+  }
+
+  function moveHead() {
+    const p = pts[prog];
+    head.setAttribute('cx', String(p.x));
+    head.setAttribute('cy', String(p.y));
+    trace.setAttribute('points', pts.slice(0, prog + 1).map((q) => `${q.x.toFixed(1)},${q.y.toFixed(1)}`).join(' '));
+  }
+
+  function toSvg(e: PointerEvent): Pt {
+    const m = pad.getScreenCTM()!.inverse();
+    const p = new DOMPoint(e.clientX, e.clientY).matrixTransform(m);
+    return { x: p.x, y: p.y };
+  }
+
+  function spark(p: Pt) {
+    const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    c.setAttribute('class', 'spark');
+    c.setAttribute('cx', String(p.x));
+    c.setAttribute('cy', String(p.y));
+    c.setAttribute('r', '3');
+    c.setAttribute('fill', SHAPES[idx].color);
+    c.setAttribute('opacity', '.5');
+    ink.appendChild(c);
+    setTimeout(() => c.remove(), 600);
+  }
+
+  /** 指が p にあるとき、線の少し先までで近い点があれば、そこまで進める */
+  function reach(p: Pt) {
+    let best = prog;
+    for (let i = prog; i < Math.min(pts.length, prog + AHEAD); i++) {
+      if (Math.hypot(pts[i].x - p.x, pts[i].y - p.y) < TOL) best = i;
+    }
+    if (best === prog) return;
+    prog = best;
+    moveHead();
+    const n = Math.floor((prog / (pts.length - 1)) * (NOTES.length - 1));
+    if (n > note) {
+      note = n;
+      tone(NOTES[n], 0, 0.18, 0.2);
+    }
+    if (prog >= pts.length - 3) finish();
+  }
+
+  function move(e: PointerEvent) {
+    const p = toSvg(e);
+    const q = last.get(e.pointerId) ?? p;
+    // 指を速く動かすと点がとぶので、あいだを細かく補って進める
+    const steps = Math.max(1, Math.ceil(Math.hypot(p.x - q.x, p.y - q.y) / 2));
+    for (let i = 1; i <= steps && !busy; i++) reach({ x: q.x + ((p.x - q.x) * i) / steps, y: q.y + ((p.y - q.y) * i) / steps });
+    if (Math.hypot(p.x - q.x, p.y - q.y) > 2.5 || !last.has(e.pointerId)) {
+      spark(p);
+      last.set(e.pointerId, p);
+    }
+  }
+
+  pad.addEventListener('pointerdown', (e) => {
+    if (e.button > 0) return;
+    e.preventDefault();
+    pad.setPointerCapture(e.pointerId);
+    last.delete(e.pointerId);
+    if (busy) return;
+    // 触った瞬間にも音と見た目で応える
+    tone(440, 0, 0.08, 0.12);
+    move(e);
+  });
+  pad.addEventListener('pointermove', (e) => {
+    if (!last.has(e.pointerId) || busy) return;
+    move(e);
+  });
+  const up = (e: PointerEvent) => last.delete(e.pointerId);
+  pad.addEventListener('pointerup', up);
+  pad.addEventListener('pointercancel', up);
+
+  const thumb = (s: Shape) =>
+    `${s.art}<path d="${s.d}" fill="none" stroke="${s.color}" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>`;
+
+  function finish() {
+    busy = true;
+    last.clear();
+    const s = SHAPES[idx];
+    prog = pts.length - 1;
+    moveHead();
+    [guide, dots, goal, head, ghost].forEach((el) => el.setAttribute('visibility', 'hidden'));
+    art.innerHTML = `<g>${s.art}</g>`;
+    msg.textContent = `${s.label} できた!`;
+    [784, 988, 1175, 1568].forEach((f, i) => tone(f, i * 0.1, 0.25, 0.25));
+    speak(s.say);
+
+    const slot = slots[idx];
+    slot.innerHTML = `<svg viewBox="0 0 100 100">${thumb(s)}</svg>`;
+    slot.classList.add('got');
+
+    setTimeout(() => (idx + 1 < SHAPES.length ? load(idx + 1) : end()), 2600);
+  }
+
+  function end() {
+    pad.classList.add('off');
+    gallery.classList.remove('off');
+    gallery.innerHTML = SHAPES.map((s, i) =>
+      `<svg x="${(i % 3) * 100}" y="${Math.floor(i / 3) * 100}" width="100" height="100" viewBox="-5 -5 110 110" style="animation-delay:${i * 0.15}s">${thumb(s)}</svg>`,
+    ).join('');
+    SHAPES.forEach((_, i) => tone(NOTES[i * 2], i * 0.15, 0.2, 0.2));
+    msg.textContent = '';
+    again.classList.remove('off');
+    setTimeout(() => speak(`${SHAPES.length}個 描けたね! おしまい`), SHAPES.length * 150);
+  }
+
+  onTap(again, () => {
+    again.classList.add('off');
+    gallery.classList.add('off');
+    pad.classList.remove('off');
+    slots.forEach((s) => { s.innerHTML = ''; s.classList.remove('got'); });
+    tone(660);
+    load(0);
+  });
+
+  // 次に進む向きを教える、線の上を先へ走る小さな点
+  function tick(now: number) {
+    if (!busy && pts.length) {
+      const t = (now % 1200) / 1200;
+      const p = pts[Math.min(pts.length - 1, prog + Math.floor(t * 28))];
+      ghost.setAttribute('cx', String(p.x));
+      ghost.setAttribute('cy', String(p.y));
+      ghost.setAttribute('opacity', String(1 - t));
+    }
+    requestAnimationFrame(tick);
+  }
+
+  load(0);
+  speak('指で なぞってみよう');
+  requestAnimationFrame(tick);
+</script>

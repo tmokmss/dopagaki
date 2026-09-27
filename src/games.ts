@@ -40,4 +40,11 @@ export const games: Game[] = [
     icon: '🔢',
     place: 'どこでも',
   },
+  {
+    slug: 'nazori',
+    title: 'なぞりがき',
+    description: '点線を指でなぞると、にじ・りんご・かたつむりなどの絵に変わる。描けた絵は上に並び、6 まい描けたらおしまい',
+    icon: '✏️',
+    place: 'どこでも',
+  },
 ];
