@@ -50,6 +50,7 @@ const buttons = [
 <script>
   import { tone } from '../lib/audio';
   import { onTap } from '../lib/tap';
+  import { addStat } from '../lib/stats';
 
   interface Piece { h: number; w: number; bg: string; r: string; f: number; bd?: string }
   const P: Record<string, Piece> = {
@@ -100,6 +101,7 @@ const buttons = [
     if (k === 'top') {
       busy = true;
       n++;
+      addStat('burger');
       cnt.textContent = String(n);
       msg.textContent = 'いただきます!';
       [523, 659, 784, 1047].forEach((f, i) => tone(f, i * 0.12, 0.2));

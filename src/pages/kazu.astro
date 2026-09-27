@@ -224,6 +224,7 @@ import GameLayout from '../layouts/GameLayout.astro';
   import { buzz, chirp, pinpon, tone } from '../lib/audio';
   import { speak, speakWait } from '../lib/speech';
   import { onTap } from '../lib/tap';
+  import { addStat } from '../lib/stats';
 
   // name は画面に出すひらがな、yomi は読み上げ用の表記 (src/lib/speech.ts の speak を参照)
   type Item = [emoji: string, name: string, yomi: string];
@@ -311,6 +312,7 @@ import GameLayout from '../layouts/GameLayout.astro';
 
   /** 想起課題の結果から難しさを調整する。まちがいが続いたら範囲を狭め、上限の数が続けてできたら広げる */
   function record(n: number, ok: boolean) {
+    addStat(ok ? 'ok' : 'ng');
     S.hist[n] = [...(S.hist[n] ?? []), ok ? 1 : 0].slice(-5);
     S.recent = [...S.recent, ok ? 1 : 0].slice(-4);
     const top = S.hist[S.max] ?? [];
@@ -676,6 +678,7 @@ import GameLayout from '../layouts/GameLayout.astro';
       await advance(n);
     }
     await party();
+    addStat('goal');
     S.last = today();
     save();
     finish();

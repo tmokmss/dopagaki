@@ -1,0 +1,207 @@
+---
+import GameLayout from '../layouts/GameLayout.astro';
+---
+<GameLayout title="きろく" scroll>
+  <h1>きろく</h1>
+  <p class="note">この端末で遊んだ記録です。遊んだ時間は、最後のタップから 1 分以内のあいだだけ数えています。</p>
+
+  <div class="tiles" id="tiles"></div>
+
+  <section>
+    <h2>遊んだ時間 (14 日)</h2>
+    <p class="pick" id="pick"></p>
+    <div class="chart" id="chart" role="img" aria-label="日ごとの遊んだ時間"></div>
+  </section>
+
+  <section id="games"></section>
+
+  <button id="reset" class="reset">記録をすべて消す</button>
+</GameLayout>
+
+<script>
+  import { games } from '../games';
+  import { emptyDay, loadStats, resetStats, today, type Day } from '../lib/stats';
+  import { onTap } from '../lib/tap';
+
+  const DAYS = 14;
+
+  const fmtTime = (ms: number) => {
+    if (ms <= 0) return '0分';
+    if (ms < 60_000) return '1分未満';
+    const m = Math.round(ms / 60_000);
+    return m < 60 ? `${m}分` : `${Math.floor(m / 60)}時間${m % 60 ? `${m % 60}分` : ''}`;
+  };
+  const dayKey = (back: number) => {
+    const d = new Date();
+    d.setDate(d.getDate() - back);
+    return today(d);
+  };
+  const add = (a: Day, b: Day) => {
+    a.plays += b.plays;
+    a.ms += b.ms;
+    a.taps += b.taps;
+    for (const [k, n] of Object.entries(b.counts ?? {})) a.counts[k] = (a.counts[k] ?? 0) + n;
+    return a;
+  };
+  const el = (tag: string, cls = '', text = '') => {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text) e.textContent = text;
+    return e;
+  };
+
+  function render() {
+    const stats = loadStats();
+    const last7 = new Set(Array.from({ length: 7 }, (_, i) => dayKey(i)));
+    const t = today();
+
+    /** slug (省略で全ゲーム) の、日付が keep を満たす日の合計 */
+    const sum = (keep: (d: string) => boolean, slug?: string) => {
+      const total = emptyDay();
+      for (const [s, days] of Object.entries(stats)) {
+        if (slug && s !== slug) continue;
+        for (const [d, v] of Object.entries(days)) if (keep(d)) add(total, v);
+      }
+      return total;
+    };
+    const ranges: [string, (d: string) => boolean][] = [
+      ['今日', (d) => d === t],
+      ['7日', (d) => last7.has(d)],
+      ['ぜんぶ', () => true],
+    ];
+
+    // 上のタイル: 今日 / 7日 / ぜんぶ の時間と回数
+    const tiles = document.getElementById('tiles')!;
+    tiles.innerHTML = '';
+    for (const [label, keep] of ranges) {
+      const s = sum(keep);
+      const tile = el('div', 'tile');
+      // 幅が狭いので「時間」「分」を小さくして 1 行に収める
+      const big = el('div', 'big');
+      for (const part of fmtTime(s.ms).match(/\d+|\D+/g)!) big.append(/\d/.test(part) ? part : el('small', '', part));
+      tile.append(el('div', 'label', label), big, el('div', 'sub', `${s.plays} 回`));
+      tiles.append(tile);
+    }
+
+    // 棒グラフ: 直近 14 日の遊んだ時間。棒をタップすると、その日の内訳を上に出す
+    const chart = document.getElementById('chart')!;
+    const pick = document.getElementById('pick')!;
+    chart.innerHTML = '';
+    const days = Array.from({ length: DAYS }, (_, i) => dayKey(DAYS - 1 - i));
+    const totals = days.map((d) => sum((x) => x === d));
+    const max = Math.max(60_000, ...totals.map((v) => v.ms));
+    const show = (i: number) => {
+      const d = days[i], v = totals[i];
+      const by = games
+        .map((g) => ({ g, ms: stats[g.slug]?.[d]?.ms ?? 0 }))
+        .filter((x) => x.ms > 0)
+        .map((x) => `${x.g.icon} ${fmtTime(x.ms)}`)
+        .join('  ');
+      pick.textContent = `${Number(d.slice(5, 7))}/${Number(d.slice(8))}  ${fmtTime(v.ms)} ・ ${v.plays} 回${by ? `  (${by})` : ''}`;
+      chart.querySelectorAll('.col').forEach((c, j) => c.classList.toggle('on', j === i));
+    };
+    days.forEach((d, i) => {
+      const col = el('div', 'col');
+      const bar = el('div', 'bar');
+      bar.style.height = totals[i].ms ? `max(3px, ${(totals[i].ms / max) * 100}%)` : '0';
+      const area = el('div', 'area');
+      area.append(bar);
+      col.append(area, el('div', 'day', String(Number(d.slice(8)))));
+      col.title = `${d} ${fmtTime(totals[i].ms)}`;
+      onTap(col, () => show(i));
+      chart.append(col);
+    });
+    show(DAYS - 1);
+
+    // ゲームごとの表
+    const list = document.getElementById('games')!;
+    list.innerHTML = '';
+    for (const g of games) {
+      const days = Object.keys(stats[g.slug] ?? {}).sort();
+      const card = el('div', 'card');
+      const head = el('div', 'head');
+      head.append(el('span', 'icon', g.icon), el('span', 'title', g.title));
+      head.append(el('span', 'lastday', days.length ? `最後: ${days.at(-1)!.slice(5).replace('-', '/')}` : 'まだ遊んでいません'));
+      card.append(head);
+      if (days.length) {
+        const sums = ranges.map(([, keep]) => sum(keep, g.slug));
+        const table = el('table');
+        const tr = el('tr');
+        tr.append(el('th'), ...ranges.map(([label]) => el('th', '', label)));
+        table.append(tr);
+        const rows: [string, (d: Day) => string][] = [
+          ['遊んだ回数', (d) => `${d.plays}`],
+          ['時間', (d) => fmtTime(d.ms)],
+          ['タップ', (d) => `${d.taps}`],
+          ...Object.entries(g.counters).map(([k, label]): [string, (d: Day) => string] => [label, (d) => `${d.counts[k] ?? 0}`]),
+        ];
+        for (const [label, f] of rows) {
+          const r = el('tr');
+          r.append(el('th', '', label), ...sums.map((s) => el('td', '', f(s))));
+          table.append(r);
+        }
+        card.append(table);
+      }
+      list.append(card);
+    }
+  }
+
+  onTap('#reset', () => {
+    if (!confirm('この端末の記録をすべて消しますか？')) return;
+    resetStats();
+    render();
+  });
+
+  render();
+  // ほかのタブで遊んで戻ってきたときに新しくする
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') render(); });
+</script>
+
+<style>
+  h1 { font-size: 24px; font-weight: 500; margin: 8px 0 4px; }
+  h2 { font-size: 16px; font-weight: 500; margin: 0 0 4px; }
+  .note { font-size: 12px; color: var(--text-secondary); margin: 0 0 14px; }
+  section { margin-bottom: 18px; }
+  .tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 18px; }
+  .reset {
+    display: block;
+    margin: 8px auto 24px;
+    font-size: 14px;
+    color: var(--text-secondary);
+  }
+</style>
+
+<style is:global>
+  .tile { background: var(--surface-1); border-radius: 12px; padding: 10px 12px; }
+  .tile .label { font-size: 12px; color: var(--text-secondary); }
+  .tile .big { font-size: 20px; font-weight: 500; margin-top: 2px; white-space: nowrap; }
+  .tile .big small { font-size: 12px; font-weight: 400; }
+  .tile .sub { font-size: 12px; color: var(--text-secondary); }
+
+  .pick { font-size: 13px; min-height: 1.4em; margin: 0 0 6px; color: var(--text-secondary); }
+  .chart { display: flex; gap: 2px; height: 140px; }
+  .chart .col { flex: 1; display: flex; flex-direction: column; cursor: pointer; }
+  .chart .area {
+    flex: 1;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    border-bottom: 1px solid var(--border-strong);
+  }
+  .chart .bar { width: 70%; max-width: 20px; background: var(--border-accent); border-radius: 4px 4px 0 0; opacity: .55; }
+  .chart .col.on .bar { opacity: 1; }
+  .chart .day { font-size: 11px; text-align: center; color: var(--text-secondary); padding-top: 3px; }
+  .chart .col.on .day { color: var(--text-primary); font-weight: 500; }
+
+  .card { background: var(--surface-1); border-radius: 12px; padding: 12px; margin-bottom: 10px; }
+  .card .head { display: flex; align-items: center; gap: 8px; }
+  .card .icon { font-size: 26px; line-height: 1; }
+  .card .title { font-size: 16px; font-weight: 500; flex: 1; }
+  .card .lastday { font-size: 12px; color: var(--text-secondary); }
+  .card table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 13px; font-variant-numeric: tabular-nums; }
+  .card th, .card td { padding: 4px 0; border-top: 0.5px solid var(--border-strong); }
+  .card th { text-align: left; font-weight: 400; color: var(--text-secondary); }
+  .card tr:first-child th { border-top: 0; font-size: 12px; text-align: right; }
+  .card tr:first-child th:first-child { text-align: left; }
+  .card td { text-align: right; }
+</style>

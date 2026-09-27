@@ -8,7 +8,10 @@ import { href } from '../lib/url';
 const commit = (process.env.GITHUB_SHA ?? execSync('git rev-parse HEAD').toString()).trim().slice(0, 7);
 ---
 <GameLayout title="こどもの待ち時間ゲーム" back={false} scroll>
-  <h1>まちじかん ゲーム</h1>
+  <div class="top">
+    <h1>まちじかん ゲーム</h1>
+    <a class="stats" href={href('stats/')}>きろく</a>
+  </div>
   <ul class="list">
     {games.map((g) => (
       <li>
@@ -26,7 +29,10 @@ const commit = (process.env.GITHUB_SHA ?? execSync('git rev-parse HEAD').toStrin
 </GameLayout>
 
 <style>
-  h1 { font-size: 24px; font-weight: 500; margin: 8px 0 16px; }
+  .top { display: flex; align-items: baseline; justify-content: space-between; margin: 8px 0 16px; }
+  h1 { font-size: 24px; font-weight: 500; margin: 0; }
+  /* 親向けなので、子どもが押しにくいよう小さく目立たなくする */
+  .top a.stats { display: inline; padding: 4px 0; background: none; font-size: 13px; color: var(--text-secondary); text-decoration: underline; }
   .list { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
   a {
     display: flex;
