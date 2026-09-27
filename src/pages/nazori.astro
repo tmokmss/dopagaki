@@ -63,6 +63,7 @@ const SLOTS = 6;
   import { tone } from '../lib/audio';
   import { speak } from '../lib/speech';
   import { onTap } from '../lib/tap';
+  import { addStat } from '../lib/stats';
 
   // なぞる線はタップではなくドラッグなので、onTap ではなく pointer イベントを直接使う
 
@@ -288,6 +289,7 @@ const SLOTS = 6;
     const slot = slots[idx];
     slot.innerHTML = `<svg viewBox="0 0 100 100">${thumb(s)}</svg>`;
     slot.classList.add('got');
+    addStat('drawn');
 
     setTimeout(() => (idx + 1 < SHAPES.length ? load(idx + 1) : end()), 2600);
   }
@@ -301,6 +303,7 @@ const SLOTS = 6;
     SHAPES.forEach((_, i) => tone(NOTES[i * 2], i * 0.15, 0.2, 0.2));
     msg.textContent = '';
     again.classList.remove('off');
+    addStat('done');
     setTimeout(() => speak(`${SHAPES.length}個 描けたね! おしまい`), SHAPES.length * 150);
   }
 

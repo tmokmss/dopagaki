@@ -1,5 +1,6 @@
 ---
 import { href } from '../lib/url';
+import { games } from '../games';
 
 interface Props {
   title: string;
@@ -13,9 +14,12 @@ interface Props {
   scroll?: boolean;
 }
 const { title, back = true, scroll = false } = Astro.props;
+// ゲームのページなら、プレイ記録 (src/lib/stats.ts) を取る
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+const game = games.find((g) => Astro.url.pathname.replace(base, '').replace(/\//g, '') === g.slug)?.slug;
 ---
 <!doctype html>
-<html lang="ja" class={scroll ? 'scroll' : 'fit'}>
+<html lang="ja" class={scroll ? 'scroll' : 'fit'} data-game={game}>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
@@ -54,6 +58,11 @@ const { title, back = true, scroll = false } = Astro.props;
 </html>
 
 <script>
+  import { track } from '../lib/stats';
+
+  const game = document.documentElement.dataset.game;
+  if (game) track(game);
+
   if (document.documentElement.classList.contains('fit')) {
     // iOS Safari は touch-action / overscroll-behavior だけではバウンスやピンチを止めきれないので JS でも止める
     const stop = (e: Event) => e.preventDefault();

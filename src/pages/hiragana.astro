@@ -119,6 +119,7 @@ import GameLayout from '../layouts/GameLayout.astro';
   import { chirp, tone } from '../lib/audio';
   import { canSpeak, speak, speakWait } from '../lib/speech';
   import { onTap } from '../lib/tap';
+  import { addStat } from '../lib/stats';
 
   // [もじ, ことば, えもじ]  「を」「ん」ではじまることばはないので入れない
   // ことばは読み上げ専用で画面には出さないので、ひらがなにせず漢字・カタカナで書く (src/lib/speech.ts の speak を参照)
@@ -247,6 +248,7 @@ import GameLayout from '../layouts/GameLayout.astro';
     egg.state = 'open';
     const slot = got.length;
     got.push(egg.i);
+    addStat('egg');
     egg.el.classList.remove('ready');
     egg.el.classList.add('open');
     chirp(500 + (slot % 8) * 80);
@@ -292,6 +294,7 @@ import GameLayout from '../layouts/GameLayout.astro';
   function finish() {
     full.hidden = false;
     book.classList.add('done');
+    addStat('full');
     [523, 659, 784].forEach((f) => tone(f, 0, 0.6, 0.12));
     tone(1047, 0.12, 0.7, 0.12);
     speak('図鑑 いっぱい！', 'どれが 好き？');
