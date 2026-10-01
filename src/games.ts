@@ -57,4 +57,12 @@ export const games: Game[] = [
     place: 'どこでも',
     counters: { drawn: '描けた絵', done: 'ぜんぶ描けた' },
   },
+  {
+    slug: 'kutsu',
+    title: 'くつを はこう',
+    description: '左右のくつに半分ずつシールの絵。タップで左右を入れかえ、絵がそろったら「はく」。反対だと脱げてやり直し。5 足はけたらおしまい',
+    icon: '👟',
+    place: 'どこでも',
+    counters: { ok: 'はけた', ng: 'はんたい', done: 'ぜんぶはけた' },
+  },
 ];
