@@ -1,0 +1,249 @@
+---
+import GameLayout from '../layouts/GameLayout.astro';
+---
+<GameLayout title="くつを はこう">
+  <div class="hud">
+    <span>はけた: <span id="cnt">0</span> / <span id="goal"></span></span>
+    <span id="msg"></span>
+  </div>
+  <div id="room" class="grow">
+    <svg id="scene" viewBox="-100 -210 200 410">
+      <defs>
+        <!-- シールの右半分だけ残す (左のくつは左右反転して左半分になる) -->
+        <clipPath id="half"><rect x="0" y="-30" width="30" height="60" /></clipPath>
+      </defs>
+      <rect class="mat" x="-96" y="6" width="192" height="190" rx="14" />
+      <g id="feet"></g>
+      <g id="shoes"></g>
+    </svg>
+    <div id="full" hidden>
+      <div class="emo">😆</div>
+      <h2>じょうずに はけたね！</h2>
+      <button id="again">もういっかい</button>
+    </div>
+  </div>
+  <button id="wear">👟 はく！</button>
+</GameLayout>
+
+<style is:global>
+  #room { position: relative; border-radius: 12px; background: var(--surface-1); overflow: hidden; }
+  #scene { position: absolute; inset: 0; width: 100%; height: 100%; }
+  #scene .mat { fill: #E6DCCB; }
+  @media (prefers-color-scheme: dark) { #scene .mat { fill: #4A4640; } }
+  .shoe { cursor: pointer; transition: transform .35s cubic-bezier(.3, 1.3, .5, 1), opacity .3s; }
+  .shoe.gone { opacity: 0; }
+  .shoe .shake, .step { transform-box: fill-box; transform-origin: 50% 50%; }
+  .shoe.oops .shake { animation: oops .8s ease-in-out; }
+  /* まちがえたあとは、シールの半分を光らせて手がかりにする */
+  .shoe.hint .sticker { animation: hint 1s ease-in-out 3; }
+  #scene.walk .step-L { animation: step .4s ease-in-out 3; }
+  #scene.walk .step-R { animation: step .4s ease-in-out .2s 3; }
+  .sparkle { transform-box: fill-box; transform-origin: 50% 50%; animation: sparkle .7s ease-out forwards; pointer-events: none; }
+  @keyframes oops { 15% { transform: rotate(-10deg) } 35% { transform: rotate(9deg) } 55% { transform: rotate(-7deg) } 75% { transform: rotate(4deg) } }
+  @keyframes hint { 50% { opacity: .35 } }
+  @keyframes step { 50% { transform: translateY(-14px) scale(1.05) } }
+  @keyframes sparkle { from { transform: scale(.3); opacity: 1 } to { transform: scale(1.8); opacity: 0 } }
+  #wear { height: 72px; margin-top: 14px; font-size: 26px; font-weight: 700; background: #378ADD; color: #fff; border: 0; border-radius: 999px; }
+  #wear.off { opacity: .45; }
+  #full { position: absolute; inset: 0; z-index: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; background: var(--surface-1); animation: fpop .4s ease-out; }
+  #full[hidden] { display: none; }
+  #full .emo { font-family: "Apple Color Emoji", "Noto Color Emoji", "Segoe UI Emoji", sans-serif; font-size: 96px; line-height: 1; }
+  #full h2 { margin: 0; font-family: "Hiragino Maru Gothic ProN", "Hiragino Sans", system-ui, sans-serif; font-size: 26px; }
+  #full button { background: #378ADD; color: #fff; font-size: 22px; padding: 10px 32px; border-radius: 999px; }
+  @keyframes fpop { from { transform: scale(.4); opacity: 0; } to { transform: none; opacity: 1; } }
+</style>
+
+<script>
+  import { chirp, pinpon, tone } from '../lib/audio';
+  import { speak } from '../lib/speech';
+  import { onTap } from '../lib/tap';
+  import { addStat } from '../lib/stats';
+
+  // 左右を覚えるコツ「シールを半分ずつ貼って、正しく並べると絵がそろう」をそのまま遊びにする。
+  // くつをタップすると左右が入れかわり、「はく」で足にはく。反対だと「あれれ?」で脱げるだけで、何度でもやり直せる
+  type Side = 'L' | 'R';
+  interface Shoe { side: Side; slot: Side; el: SVGGElement }
+
+  // 3 歳が数えきれて、待ち時間に収まる数
+  const GOAL = 5;
+  /** 足・くつの中心の x (左は -D)。シールはちょうど真ん中 (x = 0) でそろう */
+  const D = 30;
+  const FEET_Y = -95, FLOOR_Y = 100;
+  /** シールの中心の y (くつの中での位置) */
+  const STICKER_Y = -55;
+  const NS = 'http://www.w3.org/2000/svg';
+
+  const scene = document.getElementById('scene')!;
+  const feetG = document.getElementById('feet')!;
+  const shoesG = document.getElementById('shoes')!;
+  const cntEl = document.getElementById('cnt')!;
+  const msg = document.getElementById('msg')!;
+  const wearBtn = document.getElementById('wear')!;
+  const full = document.getElementById('full')!;
+  document.getElementById('goal')!.textContent = String(GOAL);
+
+  // どれも左右対称の絵にする (左のくつは右のくつを反転して描くので、反転しても同じ絵になるように)
+  const star = Array.from({ length: 10 }, (_, i) => {
+    const a = -Math.PI / 2 + (i * Math.PI) / 5, r = i % 2 ? 7 : 16;
+    return `${(Math.cos(a) * r).toFixed(1)},${(Math.sin(a) * r + 1.5).toFixed(1)}`;
+  }).join(' ');
+  const petals = Array.from({ length: 5 }, (_, i) => {
+    const a = -Math.PI / 2 + (i * 2 * Math.PI) / 5;
+    return `<circle cx="${(Math.cos(a) * 9).toFixed(1)}" cy="${(Math.sin(a) * 9).toFixed(1)}" r="7" fill="#ED93B1"/>`;
+  }).join('');
+  const PICS = [
+    `<path d="M0 15 C-6 9 -18 2 -16 -7 C-14 -16 -3 -15 0 -8 C3 -15 14 -16 16 -7 C18 2 6 9 0 15Z" fill="#E24B4A"/>`,
+    `<polygon points="${star}" fill="#EF9F27"/>`,
+    `<circle r="15" fill="#FAC775"/><circle cx="-5.5" cy="-3" r="2.2" fill="#2C2C2A"/><circle cx="5.5" cy="-3" r="2.2" fill="#2C2C2A"/><path d="M-7 4 Q0 11 7 4" stroke="#2C2C2A" stroke-width="2" fill="none" stroke-linecap="round"/>`,
+    `${petals}<circle r="5.5" fill="#FAC775"/>`,
+    `<path d="M-14 -4 L-13 -16 L-5 -10 Z M14 -4 L13 -16 L5 -10 Z" fill="#888780"/><circle cy="2" r="13" fill="#B4B2A9"/><circle cx="-5" cy="0" r="2" fill="#2C2C2A"/><circle cx="5" cy="0" r="2" fill="#2C2C2A"/><path d="M-2 4 L2 4 L0 6.5Z" fill="#D4537E"/><path d="M-4 9 Q0 11 4 9" stroke="#2C2C2A" stroke-width="1.5" fill="none"/>`,
+    `<circle r="15" fill="#378ADD"/><circle cx="-5" cy="-4" r="3" fill="#fff"/><circle cx="5" cy="-4" r="3" fill="#fff"/><circle cx="-5" cy="-4" r="1.5" fill="#2C2C2A"/><circle cx="5" cy="-4" r="1.5" fill="#2C2C2A"/><path d="M-6 5 Q0 10 6 5" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round"/>`,
+  ];
+  const COLORS = [['#378ADD', '#185FA5'], ['#E24B4A', '#A32D2D'], ['#639922', '#3B6D11'], ['#D4537E', '#993556'], ['#EF9F27', '#BA7517']];
+
+  // 右足・右くつの形。親指側 (内側 = 左) がふくらみ、土ふまずがへこむ。左は x を反転して使う
+  const FOOT = `<path d="M-24 -45 C-24 -64 30 -62 32 -42 C34 -10 24 20 22 48 C20 72 -22 72 -22 48 C-22 30 -12 16 -13 -5 C-14 -22 -24 -32 -24 -45Z"/>
+    <ellipse cx="-12" cy="-63" rx="12" ry="14"/><circle cx="5" cy="-64" r="6.5"/><circle cx="15" cy="-59" r="5.5"/><circle cx="23" cy="-52" r="5"/><circle cx="29" cy="-43" r="4.5"/>`;
+  const SHOE_PATH = 'M-27 -60 C-27 -92 0 -100 16 -86 C34 -72 42 -45 40 -15 C38 15 28 35 28 58 C28 86 -26 86 -26 58 C-26 36 -16 20 -16 0 C-16 -20 -27 -35 -27 -60Z';
+
+  function shoeSvg(c: string[], pic: string) {
+    return `<path d="${SHOE_PATH}" fill="${c[0]}" stroke="${c[1]}" stroke-width="3"/>
+      <ellipse cx="-2" cy="-78" rx="16" ry="10" fill="#fff" opacity=".3"/>
+      <ellipse cx="3" cy="38" rx="18" ry="32" fill="#FBF6EC" stroke="${c[1]}" stroke-width="2"/>
+      <rect x="-17" y="-22" width="54" height="15" rx="6" fill="${c[1]}"/>
+      <g class="sticker" transform="translate(${-D} ${STICKER_Y})"><g clip-path="url(#half)">
+        <circle r="18" fill="#fff" stroke="#D3D1C7"/>${pic}
+      </g></g>`;
+  }
+
+  const mirror = (side: Side) => (side === 'L' ? 'scale(-1 1)' : '');
+  const slotX = (slot: Side) => (slot === 'L' ? -D : D);
+
+  // 足は最初に 1 回だけ描く
+  for (const side of ['L', 'R'] as Side[]) {
+    const g = document.createElementNS(NS, 'g');
+    g.setAttribute('transform', `translate(${slotX(side)} ${FEET_Y})`);
+    g.innerHTML = `<g class="step step-${side}"><g transform="${mirror(side)}" fill="#F5C9A8" stroke="#D9A07C" stroke-width="2">${FOOT}</g></g>`;
+    feetG.appendChild(g);
+  }
+
+  let shoes: Shoe[] = [];
+  let count = 0;
+  let round = 0;
+  let busy = false;
+
+  const place = (s: Shoe, y = FLOOR_Y) => { s.el.style.transform = `translate(${slotX(s.slot)}px, ${y}px)`; };
+  const correct = () => shoes.every((s) => s.side === s.slot);
+
+  function newShoes() {
+    shoesG.innerHTML = '';
+    const c = COLORS[round % COLORS.length], pic = PICS[round % PICS.length];
+    round++;
+    // たいていは反対に置いておく。たまに最初から正しいときもあり、そのまま「はく」でよい
+    const swapped = Math.random() < 0.7;
+    shoes = (['L', 'R'] as Side[]).map((side) => {
+      const el = document.createElementNS(NS, 'g');
+      el.setAttribute('class', 'shoe gone');
+      el.innerHTML = `<g class="step step-${side}"><g class="shake"><g transform="${mirror(side)}">${shoeSvg(c, pic)}</g></g></g>`;
+      const s: Shoe = { side, slot: swapped ? (side === 'L' ? 'R' : 'L') : side, el };
+      place(s, FLOOR_Y + 60);
+      onTap(el, swap);
+      shoesG.appendChild(el);
+      return s;
+    });
+    // 下からすべりこむ
+    void shoesG.getBoundingClientRect();
+    for (const s of shoes) { s.el.classList.remove('gone'); place(s); }
+  }
+
+  /** くつをタップすると左右が入れかわる */
+  function swap() {
+    if (busy) return;
+    for (const s of shoes) { s.slot = s.slot === 'L' ? 'R' : 'L'; place(s); s.el.classList.remove('hint'); }
+    chirp(correct() ? 700 : 400, correct() ? 1400 : 900, 0.2, 0.2);
+    msg.textContent = '';
+  }
+
+  function wear() {
+    if (busy || !full.hidden) return;
+    busy = true;
+    wearBtn.classList.add('off');
+    for (const s of shoes) place(s, FEET_Y);
+    tone(330, 0, 0.12);
+    tone(392, 0.12, 0.12);
+    setTimeout(correct() ? ok : oops, 400);
+  }
+
+  function ok() {
+    count++;
+    cntEl.textContent = String(count);
+    addStat('ok');
+    msg.textContent = 'ぴったり！';
+    pinpon();
+    speak('ピッタリ！');
+    // シールがそろったところをキラッとさせる
+    const sp = document.createElementNS(NS, 'circle');
+    sp.setAttribute('class', 'sparkle');
+    sp.setAttribute('cx', '0');
+    sp.setAttribute('cy', String(FEET_Y + STICKER_Y));
+    sp.setAttribute('r', '22');
+    sp.setAttribute('fill', 'none');
+    sp.setAttribute('stroke', '#FAC775');
+    sp.setAttribute('stroke-width', '5');
+    scene.appendChild(sp);
+    setTimeout(() => sp.remove(), 800);
+    // とことこ歩く
+    setTimeout(() => {
+      scene.classList.add('walk');
+      [0, 0.2, 0.4, 0.6, 0.8, 1.0].forEach((t, i) => tone(i % 2 ? 523 : 659, t, 0.1, 0.15));
+    }, 900);
+    setTimeout(() => {
+      scene.classList.remove('walk');
+      if (count >= GOAL) return finish();
+      for (const s of shoes) s.el.classList.add('gone');
+      setTimeout(next, 300);
+    }, 2400);
+  }
+
+  function oops() {
+    addStat('ng');
+    msg.textContent = 'あれれ？';
+    for (const s of shoes) s.el.classList.add('oops');
+    tone(392, 0, 0.18, 0.2, 'triangle');
+    tone(311, 0.2, 0.3, 0.2, 'triangle');
+    speak('あれれ？ 反対かな？');
+    setTimeout(() => {
+      for (const s of shoes) { s.el.classList.remove('oops'); s.el.classList.add('hint'); place(s); }
+      busy = false;
+      wearBtn.classList.remove('off');
+    }, 900);
+  }
+
+  function next() {
+    msg.textContent = '';
+    newShoes();
+    busy = false;
+    wearBtn.classList.remove('off');
+  }
+
+  /** GOAL 足はけたらおしまい */
+  function finish() {
+    full.hidden = false;
+    addStat('done');
+    [523, 659, 784].forEach((f) => tone(f, 0, 0.6, 0.12));
+    tone(1047, 0.12, 0.7, 0.12);
+    speak('上手に履けたね！', 'お出かけしよう');
+  }
+
+  function reset() {
+    full.hidden = true;
+    count = 0;
+    cntEl.textContent = '0';
+    next();
+  }
+
+  onTap('#wear', wear);
+  onTap(feetG, wear);
+  onTap('#again', reset);
+  next();
+</script>
