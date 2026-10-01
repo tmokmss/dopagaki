@@ -36,6 +36,8 @@ import GameLayout from '../layouts/GameLayout.astro';
   }
   .egg svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
   .egg .top, .egg .bottom { transform-box: fill-box; }
+  /* ひびの入ったたまごも ずかんの絵も無いときは、やり直しても何も変わらないので押せなくする */
+  #rst:disabled { opacity: .35; cursor: default; transform: none; }
   .egg .crack { opacity: 0; }
   .egg.cracked .crack { opacity: 1; }
   .egg.cracked { animation: wobble .5s ease-in-out; }
@@ -147,6 +149,7 @@ import GameLayout from '../layouts/GameLayout.astro';
   const book = document.getElementById('book')!;
   const full = document.getElementById('full')!;
   const cntEl = document.getElementById('cnt')!;
+  const rst = document.getElementById('rst') as HTMLButtonElement;
   document.getElementById('goal')!.textContent = String(GOAL);
 
   // たまごの絵。ヒビの線で上下に分け、割れたら上だけ飛ばす
@@ -175,6 +178,11 @@ import GameLayout from '../layouts/GameLayout.astro';
   // 読み上げごとに番号を振り、いま鳴っているものが終わったときだけ解除する
   let talking = 0;
   let talkSeq = 0;
+
+  /** 「もういちど」は、ひびが入ったたまごか ずかんの絵があるときだけ押せる (連打してもたまごが落ち直し続けないように) */
+  function updateRst() {
+    rst.disabled = got.length === 0 && eggs.every((e) => e.state === 'whole');
+  }
 
   /** 見えているたまごとずかんに無いもじを選ぶ */
   function pickKana() {
@@ -236,6 +244,7 @@ import GameLayout from '../layouts/GameLayout.astro';
       egg.state = 'cracked';
       egg.el.classList.remove('drop');
       egg.el.classList.add('cracked');
+      updateRst();
       tone(330, 0, 0.08, 0.2, 'triangle');
       tone(440, 0.1, 0.08, 0.2, 'triangle');
       talk([k, '何が 出るかな？'], () => chirp(300 + (egg.i % 10) * 40), 1000).then((ok) => {
@@ -316,6 +325,7 @@ import GameLayout from '../layouts/GameLayout.astro';
     }
     for (const egg of eggs) egg.i = -1;
     for (const egg of eggs) setEgg(egg);
+    updateRst();
   }
 
   for (let n = 0; n < EGGS; n++) {
@@ -335,7 +345,9 @@ import GameLayout from '../layouts/GameLayout.astro';
     void s.offsetWidth;
     s.classList.add('pop');
   });
-  onTap('#rst', reset);
+  onTap(rst, () => {
+    if (!rst.disabled) reset();
+  });
   onTap('#again', reset);
   reset();
 </script>
