@@ -28,7 +28,7 @@ export const games: Game[] = [
   {
     slug: 'burger',
     title: 'ハンバーガーづくり',
-    description: '具をタップして積む。「ふた」をのせると完成してジャンプする',
+    description: '具をタップして積む。「ふた」をのせると中身に合わせた名前（チーズ 3まい バーガーなど）が付き、バーガーをタップすると具を数える',
     icon: '🍔',
     place: 'ハンバーガー屋',
     counters: { burger: '作ったバーガー' },

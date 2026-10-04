@@ -13,12 +13,14 @@ const buttons = [
 <GameLayout title="ハンバーガーづくり">
   <div class="hud">
     <span>できた: <span id="cnt">0</span> こ</span>
-    <span id="msg"></span>
   </div>
   <div class="board grow">
-    <div id="burger">
-      <div id="stack"></div>
-      <div class="tray"></div>
+    <div class="name"><div id="nm"></div><div id="q"></div></div>
+    <div class="stage">
+      <div id="burger">
+        <div id="stack"></div>
+        <div class="tray"></div>
+      </div>
     </div>
   </div>
   <div class="grid">
@@ -31,14 +33,25 @@ const buttons = [
 </GameLayout>
 
 <style is:global>
-  #msg { color: var(--text-success); }
   .board { border-radius: 12px; background: var(--surface-1); display: flex; flex-direction: column; justify-content: flex-end; padding: 12px 0 16px; overflow: hidden; }
+  /* 完成したバーガーの名前と「なんまい?」。高さは常に確保して、出たときにバーガーがずれないようにする */
+  .name { flex-shrink: 0; height: 72px; padding: 0 12px; text-align: center; }
+  /* 名前の下の余りがバーガーの場所。縮める前の高さで名前を押し上げないよう、ここで受け止める */
+  .stage { flex: 1; min-height: 0; display: flex; flex-direction: column; justify-content: flex-end; }
+  #nm { font-size: 24px; font-weight: bold; color: var(--text-success); white-space: nowrap; }
+  #nm.pop { animation: pop .4s ease-out; }
+  @keyframes pop { from { transform: scale(.4); opacity: 0 } }
+  #q { font-size: 18px; margin-top: 6px; }
+  #q.big { font-size: 24px; font-weight: bold; color: #185FA5; }
   /* 高く積んで盤面からはみ出しそうなときは、お皿を基準に全体を縮めて収める (倍率は JS で決める) */
   #burger { flex-shrink: 0; transform-origin: 50% 100%; transition: transform .25s ease-out; }
   #stack { display: flex; flex-direction: column-reverse; width: 200px; margin: 0 auto; }
   .tray { width: 240px; height: 10px; border-radius: 5px; background: #D3D1C7; margin: 2px auto 0; }
   .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 14px; }
   .pc { margin: 0 auto; animation: drop .35s ease-out; }
+  /* 数えるときに具の右に付ける番号 */
+  /* 薄い具 (チーズ・たまねぎ) は重なるので番号は付けず、数え終わった印の点だけ付ける。数は名前の下に大きく出す */
+  .num { position: absolute; left: calc(100% + 8px); top: 50%; width: 10px; height: 10px; margin-top: -5px; border-radius: 5px; background: #378ADD; animation: pop .25s ease-out; }
   @keyframes drop { from { transform: translateY(-140px); opacity: .3 } to { transform: translateY(0); opacity: 1 } }
   .done { animation: yay .6s ease-in-out 2; }
   @keyframes yay { 50% { transform: scale(1.15) rotate(-4deg) } }
@@ -50,6 +63,7 @@ const buttons = [
 <script>
   import { tone } from '../lib/audio';
   import { onTap } from '../lib/tap';
+  import { speak, speakWait } from '../lib/speech';
   import { addStat } from '../lib/stats';
 
   interface Piece { h: number; w: number; bg: string; r: string; f: number; bd?: string }
@@ -62,16 +76,31 @@ const buttons = [
     onion: { h: 8, w: 160, bg: '#F1EFE8', r: '4px', f: 620, bd: '1px solid #B4B2A9' },
     top: { h: 48, w: 185, bg: '#EF9F27', r: '90px 90px 8px 8px', f: 0 },
   };
+  // 具の名前。show は画面用、say は読み上げ用 (漢字・カタカナ)
+  const FILL: Record<string, { show: string; say: string }> = {
+    patty: { show: 'おにく', say: 'お肉' },
+    cheese: { show: 'チーズ', say: 'チーズ' },
+    lettuce: { show: 'レタス', say: 'レタス' },
+    tomato: { show: 'トマト', say: 'トマト' },
+    onion: { show: 'たまねぎ', say: 'タマネギ' },
+  };
   const stack = document.getElementById('stack')!;
   const cnt = document.getElementById('cnt')!;
-  const msg = document.getElementById('msg')!;
-  const board = document.querySelector<HTMLElement>('.board')!;
+  const nm = document.getElementById('nm')!;
+  const q = document.getElementById('q')!;
   const burger = document.getElementById('burger')!;
-  let n = 0, busy = false;
+  const stage = document.querySelector<HTMLElement>('.stage')!;
+  // done: ふたをのせて名前を出している / busy: 完成した直後で、ボタンを受け付けない / counting: 数えている最中
+  let n = 0, busy = false, done = false, counting = false;
+  // 数えている途中で次のバーガーを作りはじめたら、数えるのを打ち切るための番号
+  let run = 0;
+  // 「なんまい?」で数える具。null なら段の数 (パンも含む) を数える
+  let target: string | null = null;
 
   function add(k: string) {
     const p = P[k], d = document.createElement('div');
     d.className = 'pc';
+    d.dataset.k = k;
     d.style.cssText = `height:${p.h}px;width:${p.w}px;background:${p.bg};border-radius:${p.r};margin-top:2px;position:relative;${p.bd ? 'border:' + p.bd : ''}`;
     if (k === 'top') {
       const seeds = [[50, 14], [80, 8], [110, 10], [135, 18], [65, 26], [100, 24]]
@@ -84,32 +113,122 @@ const buttons = [
   }
 
   function fit() {
-    const cs = getComputedStyle(board);
-    const room = board.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
-    const s = Math.min(1, room / burger.offsetHeight);
+    const s = Math.min(1, stage.clientHeight / burger.offsetHeight);
     burger.style.transform = s < 1 ? `scale(${s})` : '';
   }
-  new ResizeObserver(fit).observe(board);
+  new ResizeObserver(fit).observe(stage);
 
-  function reset() { stack.innerHTML = ''; msg.textContent = ''; add('bottom'); busy = false; }
+  const pieces = () => [...stack.children] as HTMLElement[];
+
+  function tally(fills: string[]) {
+    const c = new Map<string, number>();
+    fills.forEach((k) => c.set(k, (c.get(k) ?? 0) + 1));
+    return c;
+  }
+
+  // 中身を見て名前を付ける。良し悪しは決めず、どんな作り方にもその作り方なりの名前を返す
+  function nameOf(fills: string[]) {
+    const c = tally(fills);
+    const kinds = [...c.keys()];
+    const max = Math.max(0, ...c.values());
+    const most = kinds.filter((k) => c.get(k) === max);
+    if (!kinds.length) return { show: 'パンだけ バーガー', say: 'パンだけバーガー' };
+    if (kinds.length === 5) return { show: 'ぜんぶのせ バーガー', say: '全部乗せバーガー' };
+    if (kinds.length === 1) {
+      const f = FILL[kinds[0]];
+      return max === 1
+        ? { show: `${f.show} バーガー`, say: `${f.say}バーガー` }
+        : { show: `${f.show} ${max}まい バーガー`, say: `${f.say}${max}枚バーガー` };
+    }
+    if (fills.length >= 10) return { show: 'のっぽ バーガー', say: 'ノッポバーガー' };
+    if (max >= 3 && most.length === 1) {
+      const f = FILL[most[0]];
+      return { show: `${f.show}たっぷり バーガー`, say: `${f.say}たっぷりバーガー` };
+    }
+    if (kinds.length === 2) {
+      const [a, b] = kinds.map((k) => FILL[k]);
+      return { show: `${a.show}${b.show} バーガー`, say: `${a.say}${b.say}バーガー` };
+    }
+    return { show: 'ミックス バーガー', say: 'ミックスバーガー' };
+  }
+
+  function finish() {
+    busy = true;
+    done = true;
+    n++;
+    addStat('burger');
+    cnt.textContent = String(n);
+    const fills = pieces().map((d) => d.dataset.k!).filter((k) => k in FILL);
+    const name = nameOf(fills);
+    // いちばん多い具が 2 枚以上あればその枚数を、なければ段の数を聞く
+    const c = tally(fills);
+    const max = Math.max(0, ...c.values());
+    target = max >= 2 ? fills.find((k) => c.get(k) === max)! : null;
+    const ask = target
+      ? { show: `${FILL[target].show} なんまい? 👆`, say: `${FILL[target].say}は 何枚かな?` }
+      : { show: 'なんだん? 👆', say: '何段かな?' };
+    nm.textContent = name.show;
+    nm.classList.remove('pop');
+    void nm.offsetWidth;
+    nm.classList.add('pop');
+    q.textContent = ask.show;
+    [523, 659, 784, 1047].forEach((f, i) => tone(f, i * 0.12, 0.2));
+    stack.classList.remove('done');
+    void stack.offsetWidth;
+    stack.classList.add('done');
+    setTimeout(() => speak(name.say + '!', ask.say), 500);
+    // ふたを続けて押してしまっても、すぐ次のバーガーにならないよう少し待つ
+    setTimeout(() => { busy = false; }, 1200);
+  }
+
+  // バーガーをタップすると、数える具を 1 つずつ揺らしながら 1, 2, 3 … と数え、最後に数を読み上げる
+  async function count() {
+    if (!done || counting) return;
+    counting = true;
+    const me = ++run;
+    pieces().forEach((d) => d.querySelector('.num')?.remove());
+    q.classList.add('big');
+    const list = pieces().filter((d) => !target || d.dataset.k === target);
+    const steps = [523, 587, 659, 784, 880];
+    for (let i = 0; i < list.length; i++) {
+      const b = document.createElement('span');
+      b.className = 'num';
+      list[i].animate([{}, { transform: 'translateX(14px) scale(1.06)' }, {}], { duration: 300, easing: 'ease-out' });
+      list[i].appendChild(b);
+      q.textContent = target ? `${FILL[target].show} ${i + 1}まい` : `${i + 1}だん`;
+      tone(steps[i % 5] * (i >= 5 ? 2 : 1), 0, 0.18);
+      await new Promise((r) => setTimeout(r, 450));
+      if (me !== run) return;
+    }
+    const k = list.length;
+    q.textContent = target ? `${FILL[target].show} ${k}まい!` : `${k}だん!`;
+    await speakWait(target ? `${FILL[target].say}、${k}枚!` : `${k}段!`);
+    if (me === run) counting = false;
+  }
+
+  function reset() {
+    stack.innerHTML = '';
+    nm.textContent = '';
+    q.textContent = '';
+    q.classList.remove('big');
+    done = false;
+    counting = false;
+    run++;
+    target = null;
+    add('bottom');
+  }
+
+  onTap('.board', count);
 
   onTap<HTMLButtonElement>('.bb', (b) => {
     if (busy) return;
     const k = b.dataset.k!;
+    // 完成したバーガーを見ているときにボタンを押したら、次のバーガーを作りはじめる
+    if (done) reset();
     if (k !== 'top' && stack.children.length >= 14) return;
     add(k);
-    if (k === 'top') {
-      busy = true;
-      n++;
-      addStat('burger');
-      cnt.textContent = String(n);
-      msg.textContent = 'いただきます!';
-      [523, 659, 784, 1047].forEach((f, i) => tone(f, i * 0.12, 0.2));
-      stack.classList.remove('done');
-      void stack.offsetWidth;
-      stack.classList.add('done');
-      setTimeout(reset, 1800);
-    } else tone(P[k].f);
+    if (k === 'top') finish();
+    else tone(P[k].f);
   });
 
   reset();
