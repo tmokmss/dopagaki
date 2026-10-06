@@ -1,0 +1,420 @@
+---
+import GameLayout from '../layouts/GameLayout.astro';
+
+const SLOTS = 5;
+---
+<GameLayout title="すうじと もじ">
+  <div class="hud">
+    <div id="modes">
+      <button class="mode" data-mode="num">1 2 3</button>
+      <button class="mode" data-mode="kana">あ い う</button>
+    </div>
+    <div id="shelf">
+      {Array.from({ length: SLOTS }, () => <span class="slot"></span>)}
+    </div>
+  </div>
+  <div class="board grow">
+    <svg id="pad" viewBox="0 0 100 130" preserveAspectRatio="xMidYMid meet">
+      <rect id="tray" x="4" y="101" width="92" height="27" rx="6" />
+      <g id="guides"></g>
+      <path id="guide-dots" />
+      <g id="done"></g>
+      <polyline id="trace" />
+      <g id="ink"></g>
+      <g id="prize"></g>
+      <circle id="ghost" r="2" />
+      <circle id="goal" r="4" />
+      <circle id="head" r="5" />
+    </svg>
+    <svg id="gallery" viewBox="0 0 300 200" preserveAspectRatio="xMidYMid meet" class="off"></svg>
+  </div>
+  <div class="foot">
+    <span id="msg"></span>
+    <button id="again" class="off">つぎの もじ</button>
+  </div>
+</GameLayout>
+
+<style is:global>
+  .off { display: none !important; }
+  .hud { margin-bottom: 8px; display: flex; flex-direction: column; gap: 8px; }
+  #modes { display: flex; gap: 8px; width: 100%; }
+  .mode { flex: 1; height: 44px; padding: 0; white-space: nowrap; font-size: 20px; font-weight: 700; border: 2px solid var(--border-strong); opacity: .55; }
+  .mode.on { border-color: var(--border-accent); opacity: 1; }
+  #shelf { display: flex; gap: 6px; }
+  .slot { width: 40px; height: 40px; border-radius: 10px; background: var(--surface-1); display: block; }
+  .slot svg { width: 100%; height: 100%; display: block; }
+  .slot.got { animation: pop .4s ease-out; }
+
+  .board { position: relative; border-radius: 12px; background: var(--surface-1); overflow: hidden; }
+  .board svg { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; }
+
+  #tray { fill: var(--surface-0); }
+  #guides path { fill: none; stroke: var(--surface-0); stroke-width: 11; stroke-linecap: round; stroke-linejoin: round; }
+  #guide-dots { fill: none; stroke: var(--border-strong); stroke-width: 2.4; stroke-linecap: round; stroke-dasharray: 0 5; }
+  #done polyline, #trace { fill: none; stroke-width: 7; stroke-linecap: round; stroke-linejoin: round; }
+  #ghost { fill: var(--border-accent); pointer-events: none; }
+  #goal { fill: #FAC775; stroke: #EF9F27; stroke-width: 1.2; }
+  #head { fill: #fff; stroke: var(--border-accent); stroke-width: 2; transform-box: fill-box; transform-origin: center; animation: beat 1s ease-in-out infinite; pointer-events: none; }
+  @keyframes beat { 50% { transform: scale(1.25) } }
+  .spark { pointer-events: none; animation: fade .6s ease-out forwards; }
+  @keyframes fade { to { opacity: 0; r: 0.5 } }
+
+  #prize text { font-family: "Apple Color Emoji", "Noto Color Emoji", "Segoe UI Emoji", sans-serif; text-anchor: middle; dominant-baseline: central; }
+  #prize text, #done.cheer, #gallery > svg { transform-box: fill-box; transform-origin: center; animation: pop .5s ease-out both; }
+  @keyframes pop { 0% { transform: scale(.3); opacity: 0 } 70% { transform: scale(1.15); opacity: 1 } 100% { transform: scale(1) } }
+
+  .foot { height: 64px; margin-top: 10px; display: flex; align-items: center; justify-content: center; }
+  #msg { font-size: 26px; font-weight: 500; color: var(--text-success); }
+  #again { height: 56px; padding: 0 28px; font-size: 20px; border: 2px solid var(--border-accent); }
+</style>
+
+<script>
+  import { tone } from '../lib/audio';
+  import { speak, speakWait } from '../lib/speech';
+  import { onTap } from '../lib/tap';
+  import { addStat } from '../lib/stats';
+
+  // なぞる線はタップではなくドラッグなので、onTap ではなく pointer イベントを直接使う
+  // 字は書き順どおりの画 (strokes) に分け、1 画ずつ書く向きになぞる
+
+  interface Glyph {
+    /** 画面に出す字 */
+    ch: string;
+    /** 書き順どおりの画 (viewBox 0 0 100 100、書く向き) */
+    strokes: string[];
+    color: string;
+    /** 書けたら出てくるもの */
+    emoji: string;
+    /** 出てくる数 (すうじ)。ひらがなは 1 */
+    n: number;
+    /** 読み上げ (漢字・カタカナで書く) */
+    say: string;
+  }
+
+  const num = (ch: string, strokes: string[], color: string, emoji: string, n: number, thing: string): Glyph =>
+    ({ ch, strokes, color, emoji, n, say: `${thing}が ${n}個` });
+  const kana = (ch: string, strokes: string[], color: string, emoji: string, word: string): Glyph =>
+    ({ ch, strokes, color, emoji, n: 1, say: `${ch}、${word}の ${ch}` });
+
+  // 1 回に 5 字ずつ。「つぎの もじ」で次の組へ
+  const SETS: Record<'num' | 'kana', Glyph[][]> = {
+    num: [
+      [
+        num('1', ['M50 16 L50 84'], '#E24B4A', '🍎', 1, 'リンゴ'),
+        num('2', ['M28 34 C28 12 72 12 72 36 C72 52 42 64 26 84 L76 84'], '#EF9F27', '🍊', 2, 'ミカン'),
+        num('3', ['M30 24 C40 10 72 12 70 33 C68 46 56 49 46 49 C60 49 74 54 72 68 C70 90 38 90 28 76'], '#639922', '🐟', 3, 'サカナ'),
+        num('4', ['M56 16 L22 64 L80 64', 'M58 34 L58 86'], '#378ADD', '🚗', 4, '車'),
+        num('5', ['M34 18 L32 48 C50 38 72 44 72 62 C72 86 44 88 28 76', 'M34 18 L72 18'], '#D4537E', '🌷', 5, 'お花'),
+      ],
+      [
+        num('6', ['M64 16 C40 28 28 52 30 66 C32 88 68 88 68 66 C68 46 42 46 32 62'], '#7F5BC7', '🍓', 6, 'イチゴ'),
+        num('7', ['M26 20 L74 20 L44 84'], '#1D9E8F', '🐤', 7, 'ヒヨコ'),
+        num('8', ['M64 26 C58 12 36 14 36 30 C36 46 68 50 68 68 C68 88 32 88 32 68 C32 50 64 46 64 30'], '#D85A30', '🍩', 8, 'ドーナツ'),
+        num('9', ['M68 32 C64 14 32 14 32 34 C32 52 64 54 68 34 L64 86'], '#3B6D11', '⭐', 9, 'お星様'),
+        num('10', ['M30 18 L30 84', 'M64 16 C46 16 46 84 64 84 C82 84 82 16 64 16'], '#185FA5', '🎈', 10, '風船'),
+      ],
+    ],
+    kana: [
+      [
+        kana('く', ['M62 14 Q46 34 34 50 Q48 66 64 86'], '#EF9F27', '🐻', 'クマ'),
+        kana('し', ['M38 14 L38 62 Q38 86 58 84 Q70 82 80 66'], '#E24B4A', '🦌', 'シカ'),
+        kana('つ', ['M18 42 Q50 28 72 34 Q88 40 82 60 Q76 80 44 82'], '#378ADD', '🌙', 'ツキ'),
+        kana('へ', ['M14 60 L34 36 Q40 31 46 38 L86 74'], '#639922', '🐍', 'ヘビ'),
+        kana('の', ['M54 28 Q48 58 34 74 Q22 86 18 66 Q14 38 46 30 Q78 24 82 50 Q86 76 56 86'], '#7F5BC7', '🪚', 'ノコギリ'),
+      ],
+      [
+        kana('こ', ['M30 30 Q50 26 70 30 L60 40', 'M28 64 Q30 80 50 80 L76 78'], '#D4537E', '🐨', 'コアラ'),
+        kana('い', ['M26 24 Q22 56 30 72 Q35 80 42 68', 'M66 32 Q76 44 78 62'], '#D85A30', '🐕', 'イヌ'),
+        kana('り', ['M36 20 Q32 40 34 58 L42 48', 'M64 16 Q72 40 66 62 Q60 80 40 88'], '#E24B4A', '🍎', 'リンゴ'),
+        kana('て', ['M16 30 Q50 24 82 22 Q56 32 48 50 Q42 72 68 84'], '#1D9E8F', '🐞', 'テントウムシ'),
+        kana('ろ', ['M32 22 L68 22 L28 58 Q50 42 68 52 Q82 62 72 78 Q62 88 38 84'], '#185FA5', '🚀', 'ロケット'),
+      ],
+    ],
+  };
+
+  // ドレミの 5 音階。なぞり進むほど高い音が鳴る
+  const NOTES = [523, 587, 659, 784, 880, 1047, 1175, 1319, 1568, 1760, 2093, 2349];
+  // 数えるときの音。1 つ出るごとに上がる
+  const COUNT = [523, 587, 659, 698, 784, 880, 988, 1047, 1175, 1319];
+  const WORD = ['イチ', 'ニ', 'サン', 'ヨン', 'ゴ', 'ロク', 'ナナ', 'ハチ', 'キュウ', 'ジュウ'];
+  // 線からどれだけ離れていても「なぞれている」とみなすか・一度にどこまで先へ進めるか (viewBox の単位)
+  const TOL = 12;
+  const AHEAD = 14;
+
+  const pad = document.querySelector<SVGSVGElement>('#pad')!;
+  const gallery = document.querySelector<SVGSVGElement>('#gallery')!;
+  const guides = document.getElementById('guides')!;
+  const dots = document.getElementById('guide-dots')!;
+  const done = document.getElementById('done')!;
+  const trace = document.getElementById('trace')!;
+  const ink = document.getElementById('ink')!;
+  const prize = document.getElementById('prize')!;
+  const ghost = document.getElementById('ghost')!;
+  const goal = document.getElementById('goal')!;
+  const head = document.getElementById('head')!;
+  const slots = document.querySelectorAll<HTMLElement>('.slot');
+  const modeBtns = document.querySelectorAll<HTMLElement>('.mode');
+  const msg = document.getElementById('msg')!;
+  const again = document.getElementById('again')!;
+
+  const NS = 'http://www.w3.org/2000/svg';
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+  type Pt = { x: number; y: number };
+  type Mode = 'num' | 'kana';
+  let mode: Mode = 'num';
+  const setNo: Record<Mode, number> = { num: 0, kana: 0 };
+  let set: Glyph[] = [];
+  let idx = 0;
+  /** いまの字の画ごとの点 (1 単位おき) */
+  let strokes: Pt[][] = [];
+  let stroke = 0, prog = 0, note = -1, busy = false, total = 0, before = 0;
+  /** 字を書くたびに増える。途中で字や組を変えたとき、前の字のあとの演出を止める */
+  let gen = 0;
+  const last = new Map<number, Pt>();
+
+  const pts = () => strokes[stroke];
+  const line = (p: Pt[]) => p.map((q) => `${q.x.toFixed(1)},${q.y.toFixed(1)}`).join(' ');
+
+  function sample(d: string): Pt[] {
+    const path = document.createElementNS(NS, 'path');
+    path.setAttribute('d', d);
+    guides.appendChild(path);
+    const len = path.getTotalLength();
+    const out: Pt[] = [];
+    for (let l = 0; l <= len; l += 1) {
+      const p = path.getPointAtLength(l);
+      out.push({ x: p.x, y: p.y });
+    }
+    return out;
+  }
+
+  function load(i: number) {
+    gen++;
+    const g = set[i];
+    idx = i;
+    guides.innerHTML = '';
+    done.innerHTML = '';
+    done.classList.remove('cheer');
+    prize.innerHTML = '';
+    strokes = g.strokes.map(sample);
+    total = strokes.reduce((a, s) => a + s.length, 0);
+    trace.setAttribute('stroke', g.color);
+    [dots, goal, head, ghost].forEach((el) => el.removeAttribute('visibility'));
+    busy = false;
+    note = -1;
+    msg.textContent = '';
+    startStroke(0);
+  }
+
+  function startStroke(k: number) {
+    stroke = k;
+    prog = 0;
+    before = strokes.slice(0, k).reduce((a, s) => a + s.length, 0);
+    dots.setAttribute('d', set[idx].strokes[k]);
+    const end = pts()[pts().length - 1];
+    goal.setAttribute('cx', String(end.x));
+    goal.setAttribute('cy', String(end.y));
+    moveHead();
+  }
+
+  function moveHead() {
+    const p = pts()[prog];
+    head.setAttribute('cx', String(p.x));
+    head.setAttribute('cy', String(p.y));
+    trace.setAttribute('points', line(pts().slice(0, prog + 1)));
+  }
+
+  function toSvg(e: PointerEvent): Pt {
+    const m = pad.getScreenCTM()!.inverse();
+    const p = new DOMPoint(e.clientX, e.clientY).matrixTransform(m);
+    return { x: p.x, y: p.y };
+  }
+
+  function spark(p: Pt) {
+    const c = document.createElementNS(NS, 'circle');
+    c.setAttribute('class', 'spark');
+    c.setAttribute('cx', String(p.x));
+    c.setAttribute('cy', String(p.y));
+    c.setAttribute('r', '3');
+    c.setAttribute('fill', set[idx].color);
+    c.setAttribute('opacity', '.5');
+    ink.appendChild(c);
+    setTimeout(() => c.remove(), 600);
+  }
+
+  /** 指が p にあるとき、線の少し先までで近い点があれば、そこまで進める */
+  function reach(p: Pt) {
+    const s = pts();
+    let best = prog;
+    for (let i = prog; i < Math.min(s.length, prog + AHEAD); i++) {
+      if (Math.hypot(s[i].x - p.x, s[i].y - p.y) < TOL) best = i;
+    }
+    if (best === prog) return;
+    prog = best;
+    moveHead();
+    const n = Math.floor(((before + prog) / total) * (NOTES.length - 1));
+    if (n > note) {
+      note = n;
+      tone(NOTES[n], 0, 0.18, 0.2);
+    }
+    if (prog >= s.length - 3) endStroke();
+  }
+
+  function endStroke() {
+    const g = set[idx];
+    const pl = document.createElementNS(NS, 'polyline');
+    pl.setAttribute('points', line(pts()));
+    pl.setAttribute('stroke', g.color);
+    done.appendChild(pl);
+    trace.setAttribute('points', '');
+    if (stroke + 1 < strokes.length) {
+      // 次の画へ。指は一度はなしてから書き始める
+      last.clear();
+      tone(1047, 0, 0.12, 0.2);
+      tone(1319, 0.08, 0.15, 0.2);
+      startStroke(stroke + 1);
+    } else {
+      finish();
+    }
+  }
+
+  function move(e: PointerEvent) {
+    const p = toSvg(e);
+    const q = last.get(e.pointerId) ?? p;
+    // 指を速く動かすと点がとぶので、あいだを細かく補って進める
+    const steps = Math.max(1, Math.ceil(Math.hypot(p.x - q.x, p.y - q.y) / 2));
+    for (let i = 1; i <= steps && !busy; i++) reach({ x: q.x + ((p.x - q.x) * i) / steps, y: q.y + ((p.y - q.y) * i) / steps });
+    if (Math.hypot(p.x - q.x, p.y - q.y) > 2.5 || !last.has(e.pointerId)) {
+      spark(p);
+      last.set(e.pointerId, p);
+    }
+  }
+
+  pad.addEventListener('pointerdown', (e) => {
+    if (e.button > 0) return;
+    e.preventDefault();
+    pad.setPointerCapture(e.pointerId);
+    last.delete(e.pointerId);
+    if (busy) return;
+    // 触った瞬間にも音と見た目で応える
+    tone(440, 0, 0.08, 0.12);
+    move(e);
+  });
+  pad.addEventListener('pointermove', (e) => {
+    if (!last.has(e.pointerId) || busy) return;
+    move(e);
+  });
+  const up = (e: PointerEvent) => last.delete(e.pointerId);
+  pad.addEventListener('pointerup', up);
+  pad.addEventListener('pointercancel', up);
+
+  const thumb = (g: Glyph) =>
+    g.strokes.map((d) => `<path d="${d}" fill="none" stroke="${g.color}" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>`).join('');
+
+  /** 出てくるものを下の皿に並べる位置。5 こまでは 1 列、それより多ければ 2 列 */
+  function spots(n: number): { x: number; y: number; s: number }[] {
+    if (n === 1) return [{ x: 50, y: 114.5, s: 22 }];
+    const rows = n > 5 ? 2 : 1;
+    const per = Math.ceil(n / rows);
+    const s = rows === 2 ? 11 : Math.min(18, 84 / per);
+    return Array.from({ length: n }, (_, i) => {
+      const r = Math.floor(i / per), c = i % per;
+      const inRow = r === rows - 1 ? n - per * r : per;
+      return { x: 50 + (c - (inRow - 1) / 2) * (88 / per), y: rows === 2 ? 108 + r * 13 : 114.5, s };
+    });
+  }
+
+  async function finish() {
+    busy = true;
+    last.clear();
+    const my = gen;
+    const g = set[idx];
+    [dots, goal, head, ghost].forEach((el) => el.setAttribute('visibility', 'hidden'));
+    done.classList.add('cheer');
+    msg.textContent = `${g.ch} かけた!`;
+    [784, 988, 1175, 1568].forEach((f, i) => tone(f, i * 0.1, 0.25, 0.25));
+
+    const slot = slots[idx];
+    slot.innerHTML = `<svg viewBox="0 0 100 100">${thumb(g)}</svg>`;
+    slot.classList.add('got');
+    addStat(mode === 'num' ? 'num' : 'kana');
+
+    await sleep(500);
+    if (my !== gen) return;
+    // 1 つずつ出しながら数える
+    for (const [i, p] of spots(g.n).entries()) {
+      if (my !== gen) return;
+      const t = document.createElementNS(NS, 'text');
+      t.setAttribute('x', String(p.x));
+      t.setAttribute('y', String(p.y));
+      t.setAttribute('font-size', String(p.s));
+      t.textContent = g.emoji;
+      prize.appendChild(t);
+      tone(COUNT[i], 0, 0.2, 0.22);
+      if (g.n > 1) await speakWait(WORD[i]);
+      else await sleep(400);
+    }
+    if (my !== gen) return;
+    await speakWait(g.say);
+    await sleep(900);
+    if (my !== gen) return;
+    idx + 1 < set.length ? load(idx + 1) : end();
+  }
+
+  function end() {
+    gen++;
+    pad.classList.add('off');
+    gallery.classList.remove('off');
+    gallery.innerHTML = set.map((g, i) =>
+      `<svg x="${(i % 3) * 100 + (i >= 3 ? 50 : 0)}" y="${Math.floor(i / 3) * 100}" width="100" height="100" viewBox="-5 -5 110 110" style="animation-delay:${i * 0.15}s">${thumb(g)}</svg>`,
+    ).join('');
+    set.forEach((_, i) => tone(NOTES[i * 2], i * 0.15, 0.2, 0.2));
+    msg.textContent = '';
+    again.classList.remove('off');
+    addStat('done');
+    setTimeout(() => speak(`${set.length}個 書けたね! おしまい`), set.length * 150);
+  }
+
+  function start(m: Mode) {
+    mode = m;
+    set = SETS[m][setNo[m] % SETS[m].length];
+    modeBtns.forEach((b) => b.classList.toggle('on', b.dataset.mode === m));
+    again.classList.add('off');
+    gallery.classList.add('off');
+    pad.classList.remove('off');
+    slots.forEach((s) => { s.innerHTML = ''; s.classList.remove('got'); });
+    load(0);
+  }
+
+  modeBtns.forEach((b) => onTap(b, () => {
+    const m = b.dataset.mode as Mode;
+    tone(m === 'num' ? 660 : 880);
+    if (m === mode) return;
+    start(m);
+    speak(m === 'num' ? '数字を 書こう' : '平仮名を 書こう');
+  }));
+
+  onTap(again, () => {
+    setNo[mode]++;
+    tone(660);
+    start(mode);
+  });
+
+  // 次に進む向きを教える、線の上を先へ走る小さな点
+  function tick(now: number) {
+    if (!busy && strokes.length) {
+      const t = (now % 1200) / 1200;
+      const s = pts();
+      const p = s[Math.min(s.length - 1, prog + Math.floor(t * 24))];
+      ghost.setAttribute('cx', String(p.x));
+      ghost.setAttribute('cy', String(p.y));
+      ghost.setAttribute('opacity', String(1 - t));
+    }
+    requestAnimationFrame(tick);
+  }
+
+  start('num');
+  speak('指で なぞってみよう');
+  requestAnimationFrame(tick);
+</script>
