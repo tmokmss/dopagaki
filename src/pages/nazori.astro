@@ -267,7 +267,15 @@ const SLOTS = 6;
     if (!last.has(e.pointerId) || busy) return;
     move(e);
   });
-  const up = (e: PointerEvent) => last.delete(e.pointerId);
+  // 途中で指を離したら、一筆書きなのでいま書いている画を書き始めに戻す
+  const up = (e: PointerEvent) => {
+    if (!last.delete(e.pointerId) || last.size || busy || prog === 0) return;
+    prog = 0;
+    note = -1;
+    moveHead();
+    tone(330, 0, 0.12, 0.15);
+    tone(262, 0.08, 0.16, 0.15);
+  };
   pad.addEventListener('pointerup', up);
   pad.addEventListener('pointercancel', up);
 
