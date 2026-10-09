@@ -1,0 +1,6 @@
+node_modules
+out
+.claude/skills
+scripts/.rec
+public/clips
+public/bgm.mp3
