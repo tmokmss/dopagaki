@@ -68,6 +68,7 @@ const plays = {
 
 const outDir = 'public/clips';
 const tmp = 'scripts/.rec';
+await mkdir(outDir, { recursive: true });
 const browser = await chromium.launch();
 for (const name of process.argv.slice(2).length ? process.argv.slice(2) : Object.keys(plays)) {
   await rm(tmp, { recursive: true, force: true });

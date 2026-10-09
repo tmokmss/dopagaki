@@ -1,4 +1,5 @@
-import { writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { rmSync, writeFileSync } from 'node:fs';
 
 const SR = 44100, BPM = 150, SEC = 24;
 const beat = 60 / BPM, bar = 4 * beat;
@@ -80,3 +81,5 @@ pcm.write('RIFF', 0); pcm.writeUInt32LE(36 + n * 2, 4); pcm.write('WAVE', 8); pc
 pcm.writeUInt32LE(16, 16); pcm.writeUInt16LE(1, 20); pcm.writeUInt16LE(1, 22); pcm.writeUInt32LE(SR, 24);
 pcm.writeUInt32LE(SR * 2, 28); pcm.writeUInt16LE(2, 32); pcm.writeUInt16LE(16, 34); pcm.write('data', 36); pcm.writeUInt32LE(n * 2, 40);
 writeFileSync('public/bgm.wav', pcm);
+execFileSync('ffmpeg', ['-v', 'error', '-y', '-i', 'public/bgm.wav', '-b:a', '192k', 'public/bgm.mp3']);
+rmSync('public/bgm.wav');
