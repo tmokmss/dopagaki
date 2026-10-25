@@ -62,6 +62,7 @@ const SLOTS = 5;
   /* 絵文字は SVG の text にせず、#pad と同じ大きさ・位置に重ねた HTML に置く。1cqw が viewBox の 1 単位 */
   #prize { position: absolute; left: 50%; top: 50%; translate: -50% -50%; width: min(100cqw, 100cqh * 100 / 130); aspect-ratio: 100 / 130; container-type: inline-size; pointer-events: none; }
   #prize span { position: absolute; translate: -50% -50%; font-family: "Apple Color Emoji", "Noto Color Emoji", "Segoe UI Emoji", sans-serif; line-height: 1; animation: pop .5s ease-out both; }
+  #prize .read { font-family: inherit; font-weight: 700; white-space: nowrap; color: var(--text-primary); }
   #done.cheer, #gallery > svg { transform-box: fill-box; transform-origin: center; animation: pop .5s ease-out both; }
   @keyframes pop { 0% { transform: scale(.3); opacity: 0 } 70% { transform: scale(1.15); opacity: 1 } 100% { transform: scale(1) } }
 
@@ -92,23 +93,25 @@ const SLOTS = 5;
     n: number;
     /** 読み上げ (漢字・カタカナで書く) */
     say: string;
+    /** 絵文字のとなりに出す読み (ひらがな) */
+    read?: string;
   }
 
   const num = (ch: string, strokes: string[], color: string, emoji: string, n: number, thing: string): Glyph =>
     ({ ch, strokes, color, emoji, n, say: `${thing}が ${n}個` });
 
-  // [もじ, ことば, えもじ, 読み上げ]  ことばは読み上げ専用なので漢字・カタカナで書く。「を」「ん」ではじまることばはないので、読み上げを別に書く
-  const KANA: [string, string, string, string?][] = [
-    ['あ', 'アリ', '🐜'], ['い', 'イヌ', '🐕'], ['う', 'ウサギ', '🐇'], ['え', '鉛筆', '✏️'], ['お', 'お握り', '🍙'],
-    ['か', 'カニ', '🦀'], ['き', 'キリン', '🦒'], ['く', 'クマ', '🐻'], ['け', 'ケーキ', '🍰'], ['こ', 'コアラ', '🐨'],
-    ['さ', 'サカナ', '🐟'], ['し', 'シカ', '🦌'], ['す', 'スイカ', '🍉'], ['せ', '石鹸', '🧼'], ['そ', 'ソフトクリーム', '🍦'],
-    ['た', 'タマゴ', '🥚'], ['ち', '蝶々', '🦋'], ['つ', 'ツキ', '🌙'], ['て', 'テントウムシ', '🐞'], ['と', 'トマト', '🍅'],
-    ['な', 'ナス', '🍆'], ['に', '人参', '🥕'], ['ぬ', '縫いぐるみ', '🧸'], ['ね', 'ネコ', '🐈'], ['の', 'ノコギリ', '🪚'],
-    ['は', 'ハナ', '🌷'], ['ひ', 'ヒヨコ', '🐤'], ['ふ', 'フネ', '🚢'], ['へ', 'ヘビ', '🐍'], ['ほ', 'ホシ', '⭐'],
-    ['ま', 'マイク', '🎤'], ['み', 'ミカン', '🍊'], ['む', 'ムシ', '🐛'], ['め', '眼鏡', '👓'], ['も', 'モモ', '🍑'],
-    ['や', 'ヤマ', '⛰️'], ['ゆ', '雪だるま', '⛄'], ['よ', 'ヨット', '⛵'],
-    ['ら', 'ライオン', '🦁'], ['り', 'リンゴ', '🍎'], ['る', 'ルーペ', '🔍'], ['れ', 'レモン', '🍋'], ['ろ', 'ロケット', '🚀'],
-    ['わ', 'ワニ', '🐊'], ['を', '', '📖', 'を、本を 読むの を'], ['ん', '', '🍞', 'ん、パンの ん'],
+  // [もじ, えもじ, 画面に出す読み, 読み上げることば, 読み上げ]  読み上げは漢字・カタカナで書く。「を」「ん」ではじまることばはないので、読み上げを別に書く
+  const KANA: [string, string, string, string, string?][] = [
+    ['あ', '🐜', 'あり', 'アリ'], ['い', '🐕', 'いぬ', 'イヌ'], ['う', '🐇', 'うさぎ', 'ウサギ'], ['え', '✏️', 'えんぴつ', '鉛筆'], ['お', '🍙', 'おにぎり', 'お握り'],
+    ['か', '🦀', 'かに', 'カニ'], ['き', '🦒', 'きりん', 'キリン'], ['く', '🐻', 'くま', 'クマ'], ['け', '🍰', 'けーき', 'ケーキ'], ['こ', '🐨', 'こあら', 'コアラ'],
+    ['さ', '🐟', 'さかな', 'サカナ'], ['し', '🦌', 'しか', 'シカ'], ['す', '🍉', 'すいか', 'スイカ'], ['せ', '🧼', 'せっけん', '石鹸'], ['そ', '🍦', 'そふとくりーむ', 'ソフトクリーム'],
+    ['た', '🥚', 'たまご', 'タマゴ'], ['ち', '🦋', 'ちょうちょう', '蝶々'], ['つ', '🌙', 'つき', 'ツキ'], ['て', '🐞', 'てんとうむし', 'テントウムシ'], ['と', '🍅', 'とまと', 'トマト'],
+    ['な', '🍆', 'なす', 'ナス'], ['に', '🥕', 'にんじん', '人参'], ['ぬ', '🧸', 'ぬいぐるみ', '縫いぐるみ'], ['ね', '🐈', 'ねこ', 'ネコ'], ['の', '🪚', 'のこぎり', 'ノコギリ'],
+    ['は', '🌷', 'はな', 'ハナ'], ['ひ', '🐤', 'ひよこ', 'ヒヨコ'], ['ふ', '🚢', 'ふね', 'フネ'], ['へ', '🐍', 'へび', 'ヘビ'], ['ほ', '⭐', 'ほし', 'ホシ'],
+    ['ま', '🎤', 'まいく', 'マイク'], ['み', '🍊', 'みかん', 'ミカン'], ['む', '🐛', 'むし', 'ムシ'], ['め', '👓', 'めがね', '眼鏡'], ['も', '🍑', 'もも', 'モモ'],
+    ['や', '⛰️', 'やま', 'ヤマ'], ['ゆ', '⛄', 'ゆきだるま', '雪だるま'], ['よ', '⛵', 'よっと', 'ヨット'],
+    ['ら', '🦁', 'らいおん', 'ライオン'], ['り', '🍎', 'りんご', 'リンゴ'], ['る', '🔍', 'るーぺ', 'ルーペ'], ['れ', '🍋', 'れもん', 'レモン'], ['ろ', '🚀', 'ろけっと', 'ロケット'],
+    ['わ', '🐊', 'わに', 'ワニ'], ['を', '📖', 'ほんを よむ', '', 'を、本を 読むの を'], ['ん', '🍞', 'ぱん', '', 'ん、パンの ん'],
   ];
   // 行ごとの色
   const ROWS = ['あいうえお', 'かきくけこ', 'さしすせそ', 'たちつてと', 'なにぬねの', 'はひふへほ', 'まみむめも', 'やゆよ', 'らりるれろ', 'わをん'];
@@ -128,8 +131,8 @@ const SLOTS = 5;
       num('9', ['M68 32 C64 14 32 14 32 34 C32 52 64 54 68 34 L64 86'], '#3B6D11', '⭐', 9, 'お星様'),
       num('10', ['M30 18 L30 84', 'M64 16 C46 16 46 84 64 84 C82 84 82 16 64 16'], '#185FA5', '🎈', 10, '風船'),
     ],
-    kana: KANA.map(([ch, word, emoji, say]) =>
-      ({ ch, strokes: KANA_STROKES[ch], color: ROW_COLORS[ROWS.findIndex((r) => r.includes(ch))], emoji, n: 1, say: say ?? `${ch}、${word}の ${ch}` })),
+    kana: KANA.map(([ch, emoji, read, word, say]) =>
+      ({ ch, strokes: KANA_STROKES[ch], color: ROW_COLORS[ROWS.findIndex((r) => r.includes(ch))], emoji, n: 1, say: say ?? `${ch}、${word}の ${ch}`, read })),
   };
 
   // ドレミの 5 音階。なぞり進むほど高い音が鳴る
@@ -349,8 +352,10 @@ const SLOTS = 5;
 
     await sleep(500);
     if (my !== gen) return;
-    // 1 つずつ出しながら数える
-    for (const [i, p] of spots(g.n).entries()) {
+    // 1 つずつ出しながら数える。読みを出すときは絵文字を左に寄せる
+    const at = spots(g.n);
+    if (g.read) at[0].x = 24;
+    for (const [i, p] of at.entries()) {
       if (my !== gen) return;
       const t = document.createElement('span');
       t.style.left = `${p.x}cqw`;
@@ -363,6 +368,16 @@ const SLOTS = 5;
       else await sleep(400);
     }
     if (my !== gen) return;
+    if (g.read) {
+      // 書いた字だけ字の色にして、ほかのひらがなとつなげる
+      const w = document.createElement('span');
+      w.className = 'read';
+      w.style.left = '64cqw';
+      w.style.top = '114.5cqw';
+      w.style.fontSize = `${Math.min(10, 54 / g.read.length)}cqw`;
+      w.innerHTML = [...g.read].map((c) => (c === g.ch ? `<b style="color:${g.color}">${c}</b>` : c)).join('');
+      prize.appendChild(w);
+    }
     await speakWait(g.say);
     await sleep(900);
     if (my !== gen) return;
