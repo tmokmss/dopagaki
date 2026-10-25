@@ -28,6 +28,26 @@ if (typeof speechSynthesis !== 'undefined') {
   speechSynthesis.addEventListener?.('voiceschanged', pickVoice);
 }
 
+// iOS / iPadOS は、タップ (touchend など) の処理中に一度 speak するまで、読み上げを何も言わずに捨てる。
+// タップは pointerdown で受けるので、最初のタップの読み上げは捨てられる。最初に指を離したとき、
+// 何も読み上げていなければ捨てられた発話 (無ければ無音の発話) を読み直して制限を外す。
+// iPad の Safari は UA が Mac と同じなので、タッチ点の数で見分ける
+const IOS = typeof navigator !== 'undefined'
+  && (/iPhone|iPad|iPod/.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1));
+let unlocked = !IOS;
+let dropped: SpeechSynthesisUtterance[] = [];
+const UNLOCK = ['touchend', 'pointerup', 'keydown'];
+function unlock() {
+  unlocked = true;
+  for (const type of UNLOCK) removeEventListener(type, unlock, true);
+  if (speechSynthesis.speaking || speechSynthesis.pending) return;
+  const us = dropped.length ? dropped : [Object.assign(new SpeechSynthesisUtterance(''), { volume: 0 })];
+  for (const u of us) speechSynthesis.speak(u);
+}
+if (IOS && typeof speechSynthesis !== 'undefined') {
+  for (const type of UNLOCK) addEventListener(type, unlock, true);
+}
+
 /** 読み上げられそうか。声の一覧がまだ空のときは試してみる */
 export function canSpeak(): boolean {
   if (typeof speechSynthesis === 'undefined') return false;
@@ -60,17 +80,17 @@ function utter(texts: string[]): SpeechSynthesisUtterance | null {
   if (WARN) texts.forEach(checkKana);
   if (!canSpeak()) return null;
   speechSynthesis.cancel();
-  let last: SpeechSynthesisUtterance | null = null;
-  for (const text of texts) {
+  const us = texts.map((text) => {
     const u = new SpeechSynthesisUtterance(text);
     u.lang = 'ja-JP';
     if (jaVoice) u.voice = jaVoice;
     // pitch をいじると音質が落ちやすいのでそのまま。少しだけゆっくり
     u.rate = 0.9;
     speechSynthesis.speak(u);
-    last = u;
-  }
-  return last;
+    return u;
+  });
+  if (!unlocked) dropped = us;
+  return us.at(-1) ?? null;
 }
 
 /**
