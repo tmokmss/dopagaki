@@ -118,7 +118,10 @@ const SLOTS = 5;
   const ROWS = ['あいうえお', 'かきくけこ', 'さしすせそ', 'たちつてと', 'なにぬねの', 'はひふへほ', 'まみむめも', 'やゆよ', 'らりるれろ', 'わをん'];
   const ROW_COLORS = ['#E24B4A', '#EF9F27', '#639922', '#378ADD', '#D4537E', '#7F5BC7', '#1D9E8F', '#D85A30', '#3B6D11', '#185FA5'];
 
-  // 1 回にこの中から 5 字を選ぶ。すうじは小さい順に並べる
+  // ひらがなを出す順。1〜2 画で交わらない字が先、結びや交わりのある字があと
+  const EASY = 'くしつへのいこりうとてそろひんるけにえらかさきちせすたなはほまみもやゆよれわねめぬあおふむを';
+
+  // やさしい順。この順に 1 字ずつ増やしていく
   const GLYPHS: Record<'num' | 'kana', Glyph[]> = {
     num: [
       num('1', ['M50 16 L50 84'], '#E24B4A', 1),
@@ -133,7 +136,8 @@ const SLOTS = 5;
       num('10', ['M30 18 L30 84', 'M64 16 C46 16 46 84 64 84 C82 84 82 16 64 16'], '#185FA5', 10),
     ],
     kana: KANA.map(([ch, emoji, read, word, say]) =>
-      ({ ch, strokes: KANA_STROKES[ch], color: ROW_COLORS[ROWS.findIndex((r) => r.includes(ch))], emoji, n: 1, say: say ?? `${ch}、${word}の ${ch}`, read })),
+      ({ ch, strokes: KANA_STROKES[ch], color: ROW_COLORS[ROWS.findIndex((r) => r.includes(ch))], emoji, n: 1, say: say ?? `${ch}、${word}の ${ch}`, read }))
+      .sort((a, b) => EASY.indexOf(a.ch) - EASY.indexOf(b.ch)),
   };
 
   // ドレミの 5 音階。なぞり進むほど高い音が鳴る
@@ -350,6 +354,8 @@ const SLOTS = 5;
     slot.innerHTML = `<svg viewBox="0 0 100 100">${thumb(g)}</svg>`;
     slot.classList.add('got');
     addStat(mode === 'num' ? 'num' : 'kana');
+    written[g.ch] = (written[g.ch] ?? 0) + 1;
+    try { localStorage.setItem(SAVE, JSON.stringify(written)); } catch {}
 
     await sleep(500);
     if (my !== gen) return;
@@ -406,10 +412,26 @@ const SLOTS = 5;
     setTimeout(() => speak(`${set.length}個 書けたね! おしまい`), set.length * 150);
   }
 
+  // 字ごとの書けた回数。この端末に残す
+  const SAVE = 'dopagaki-moji';
+  const written: Record<string, number> = (() => {
+    try { return JSON.parse(localStorage.getItem(SAVE) ?? '{}') ?? {}; } catch { return {}; }
+  })();
+
+  /** 書いた回数の少ない字から選び、まだ書いていない字を 1 字だけ混ぜる。はじめはやさしい字から 5 字 */
+  function pick(all: Glyph[]): Glyph[] {
+    const n = slots.length;
+    const seen = all.filter((g) => written[g.ch]);
+    const fresh = all.filter((g) => !written[g.ch]);
+    const review = seen.map((g) => ({ g, r: written[g.ch] + Math.random() })).sort((a, b) => a.r - b.r).map((x) => x.g);
+    const k = Math.min(fresh.length, Math.max(1, n - seen.length));
+    return [...review.slice(0, n - k), ...fresh.slice(0, k)];
+  }
+
   function start(m: Mode) {
     mode = m;
     const all = GLYPHS[m];
-    set = all.map((g) => ({ g, r: Math.random() })).sort((a, b) => a.r - b.r).slice(0, slots.length).map((x) => x.g);
+    set = pick(all);
     if (m === 'num') set.sort((a, b) => all.indexOf(a) - all.indexOf(b));
     modeBtns.forEach((b) => b.classList.toggle('on', b.dataset.mode === m));
     again.classList.add('off');
