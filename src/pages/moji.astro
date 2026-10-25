@@ -21,11 +21,11 @@ const SLOTS = 5;
       <g id="done"></g>
       <polyline id="trace" />
       <g id="ink"></g>
-      <g id="prize"></g>
       <circle id="ghost" r="2" />
       <circle id="goal" r="4" />
       <circle id="head" r="5" />
     </svg>
+    <div id="prize"></div>
     <svg id="gallery" viewBox="0 0 300 200" preserveAspectRatio="xMidYMid meet" class="off"></svg>
   </div>
   <div class="foot">
@@ -45,7 +45,7 @@ const SLOTS = 5;
   .slot svg { width: 100%; height: 100%; display: block; }
   .slot.got { animation: pop .4s ease-out; }
 
-  .board { position: relative; border-radius: 12px; background: var(--surface-1); overflow: hidden; }
+  .board { position: relative; border-radius: 12px; background: var(--surface-1); overflow: hidden; container-type: size; }
   .board svg { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; }
 
   #tray { fill: var(--surface-0); }
@@ -59,8 +59,10 @@ const SLOTS = 5;
   .spark { pointer-events: none; animation: fade .6s ease-out forwards; }
   @keyframes fade { to { opacity: 0; r: 0.5 } }
 
-  #prize text { font-family: "Apple Color Emoji", "Noto Color Emoji", "Segoe UI Emoji", sans-serif; text-anchor: middle; dominant-baseline: central; }
-  #prize text, #done.cheer, #gallery > svg { transform-box: fill-box; transform-origin: center; animation: pop .5s ease-out both; }
+  /* 絵文字は SVG の text にせず、#pad と同じ大きさ・位置に重ねた HTML に置く。1cqw が viewBox の 1 単位 */
+  #prize { position: absolute; left: 50%; top: 50%; translate: -50% -50%; width: min(100cqw, 100cqh * 100 / 130); aspect-ratio: 100 / 130; container-type: inline-size; pointer-events: none; }
+  #prize span { position: absolute; translate: -50% -50%; font-family: "Apple Color Emoji", "Noto Color Emoji", "Segoe UI Emoji", sans-serif; line-height: 1; animation: pop .5s ease-out both; }
+  #done.cheer, #gallery > svg { transform-box: fill-box; transform-origin: center; animation: pop .5s ease-out both; }
   @keyframes pop { 0% { transform: scale(.3); opacity: 0 } 70% { transform: scale(1.15); opacity: 1 } 100% { transform: scale(1) } }
 
   .foot { height: 64px; margin-top: 10px; display: flex; align-items: center; justify-content: center; }
@@ -73,6 +75,7 @@ const SLOTS = 5;
   import { speak, speakWait } from '../lib/speech';
   import { onTap } from '../lib/tap';
   import { addStat } from '../lib/stats';
+  import { KANA_STROKES } from '../kana-strokes';
 
   // なぞる線はタップではなくドラッグなので、onTap ではなく pointer イベントを直接使う
   // 字は書き順どおりの画 (strokes) に分け、1 画ずつ書く向きになぞる
@@ -93,43 +96,40 @@ const SLOTS = 5;
 
   const num = (ch: string, strokes: string[], color: string, emoji: string, n: number, thing: string): Glyph =>
     ({ ch, strokes, color, emoji, n, say: `${thing}が ${n}個` });
-  const kana = (ch: string, strokes: string[], color: string, emoji: string, word: string): Glyph =>
-    ({ ch, strokes, color, emoji, n: 1, say: `${ch}、${word}の ${ch}` });
 
-  // 1 回に 5 字ずつ。「つぎの もじ」で次の組へ
-  const SETS: Record<'num' | 'kana', Glyph[][]> = {
+  // [もじ, ことば, えもじ, 読み上げ]  ことばは読み上げ専用なので漢字・カタカナで書く。「を」「ん」ではじまることばはないので、読み上げを別に書く
+  const KANA: [string, string, string, string?][] = [
+    ['あ', 'アリ', '🐜'], ['い', 'イヌ', '🐕'], ['う', 'ウサギ', '🐇'], ['え', '鉛筆', '✏️'], ['お', 'お握り', '🍙'],
+    ['か', 'カニ', '🦀'], ['き', 'キリン', '🦒'], ['く', 'クマ', '🐻'], ['け', 'ケーキ', '🍰'], ['こ', 'コアラ', '🐨'],
+    ['さ', 'サカナ', '🐟'], ['し', 'シカ', '🦌'], ['す', 'スイカ', '🍉'], ['せ', '石鹸', '🧼'], ['そ', 'ソフトクリーム', '🍦'],
+    ['た', 'タマゴ', '🥚'], ['ち', '蝶々', '🦋'], ['つ', 'ツキ', '🌙'], ['て', 'テントウムシ', '🐞'], ['と', 'トマト', '🍅'],
+    ['な', 'ナス', '🍆'], ['に', '人参', '🥕'], ['ぬ', '縫いぐるみ', '🧸'], ['ね', 'ネコ', '🐈'], ['の', 'ノコギリ', '🪚'],
+    ['は', 'ハナ', '🌷'], ['ひ', 'ヒヨコ', '🐤'], ['ふ', 'フネ', '🚢'], ['へ', 'ヘビ', '🐍'], ['ほ', 'ホシ', '⭐'],
+    ['ま', 'マイク', '🎤'], ['み', 'ミカン', '🍊'], ['む', 'ムシ', '🐛'], ['め', '眼鏡', '👓'], ['も', 'モモ', '🍑'],
+    ['や', 'ヤマ', '⛰️'], ['ゆ', '雪だるま', '⛄'], ['よ', 'ヨット', '⛵'],
+    ['ら', 'ライオン', '🦁'], ['り', 'リンゴ', '🍎'], ['る', 'ルーペ', '🔍'], ['れ', 'レモン', '🍋'], ['ろ', 'ロケット', '🚀'],
+    ['わ', 'ワニ', '🐊'], ['を', '', '📖', 'を、本を 読むの を'], ['ん', '', '🍞', 'ん、パンの ん'],
+  ];
+  // 行ごとの色
+  const ROWS = ['あいうえお', 'かきくけこ', 'さしすせそ', 'たちつてと', 'なにぬねの', 'はひふへほ', 'まみむめも', 'やゆよ', 'らりるれろ', 'わをん'];
+  const ROW_COLORS = ['#E24B4A', '#EF9F27', '#639922', '#378ADD', '#D4537E', '#7F5BC7', '#1D9E8F', '#D85A30', '#3B6D11', '#185FA5'];
+
+  // 1 回にこの中から 5 字を選ぶ。すうじは小さい順に並べる
+  const GLYPHS: Record<'num' | 'kana', Glyph[]> = {
     num: [
-      [
-        num('1', ['M50 16 L50 84'], '#E24B4A', '🍎', 1, 'リンゴ'),
-        num('2', ['M28 34 C28 12 72 12 72 36 C72 52 42 64 26 84 L76 84'], '#EF9F27', '🍊', 2, 'ミカン'),
-        num('3', ['M30 24 C40 10 72 12 70 33 C68 46 56 49 46 49 C60 49 74 54 72 68 C70 90 38 90 28 76'], '#639922', '🐟', 3, 'サカナ'),
-        num('4', ['M56 16 L22 64 L80 64', 'M58 34 L58 86'], '#378ADD', '🚗', 4, '車'),
-        num('5', ['M34 18 L32 48 C50 38 72 44 72 62 C72 86 44 88 28 76', 'M34 18 L72 18'], '#D4537E', '🌷', 5, 'お花'),
-      ],
-      [
-        num('6', ['M64 16 C40 28 28 52 30 66 C32 88 68 88 68 66 C68 46 42 46 32 62'], '#7F5BC7', '🍓', 6, 'イチゴ'),
-        num('7', ['M26 20 L74 20 L44 84'], '#1D9E8F', '🐤', 7, 'ヒヨコ'),
-        num('8', ['M64 26 C58 12 36 14 36 30 C36 46 68 50 68 68 C68 88 32 88 32 68 C32 50 64 46 64 30'], '#D85A30', '🍩', 8, 'ドーナツ'),
-        num('9', ['M68 32 C64 14 32 14 32 34 C32 52 64 54 68 34 L64 86'], '#3B6D11', '⭐', 9, 'お星様'),
-        num('10', ['M30 18 L30 84', 'M64 16 C46 16 46 84 64 84 C82 84 82 16 64 16'], '#185FA5', '🎈', 10, '風船'),
-      ],
+      num('1', ['M50 16 L50 84'], '#E24B4A', '🍎', 1, 'リンゴ'),
+      num('2', ['M28 34 C28 12 72 12 72 36 C72 52 42 64 26 84 L76 84'], '#EF9F27', '🍊', 2, 'ミカン'),
+      num('3', ['M30 24 C40 10 72 12 70 33 C68 46 56 49 46 49 C60 49 74 54 72 68 C70 90 38 90 28 76'], '#639922', '🐟', 3, 'サカナ'),
+      num('4', ['M56 16 L22 64 L80 64', 'M58 34 L58 86'], '#378ADD', '🚗', 4, '車'),
+      num('5', ['M34 18 L32 48 C50 38 72 44 72 62 C72 86 44 88 28 76', 'M34 18 L72 18'], '#D4537E', '🌷', 5, 'お花'),
+      num('6', ['M64 16 C40 28 28 52 30 66 C32 88 68 88 68 66 C68 46 42 46 32 62'], '#7F5BC7', '🍓', 6, 'イチゴ'),
+      num('7', ['M26 20 L74 20 L44 84'], '#1D9E8F', '🐤', 7, 'ヒヨコ'),
+      num('8', ['M64 26 C58 12 36 14 36 30 C36 46 68 50 68 68 C68 88 32 88 32 68 C32 50 64 46 64 30'], '#D85A30', '🍩', 8, 'ドーナツ'),
+      num('9', ['M68 32 C64 14 32 14 32 34 C32 52 64 54 68 34 L64 86'], '#3B6D11', '⭐', 9, 'お星様'),
+      num('10', ['M30 18 L30 84', 'M64 16 C46 16 46 84 64 84 C82 84 82 16 64 16'], '#185FA5', '🎈', 10, '風船'),
     ],
-    kana: [
-      [
-        kana('く', ['M62 14 Q46 34 34 50 Q48 66 64 86'], '#EF9F27', '🐻', 'クマ'),
-        kana('し', ['M38 14 L38 62 Q38 86 58 84 Q70 82 80 66'], '#E24B4A', '🦌', 'シカ'),
-        kana('つ', ['M18 42 Q50 28 72 34 Q88 40 82 60 Q76 80 44 82'], '#378ADD', '🌙', 'ツキ'),
-        kana('へ', ['M14 60 L34 36 Q40 31 46 38 L86 74'], '#639922', '🐍', 'ヘビ'),
-        kana('の', ['M54 28 Q48 58 34 74 Q22 86 18 66 Q14 38 46 30 Q78 24 82 50 Q86 76 56 86'], '#7F5BC7', '🪚', 'ノコギリ'),
-      ],
-      [
-        kana('こ', ['M30 30 Q50 26 70 30 L60 40', 'M28 64 Q30 80 50 80 L76 78'], '#D4537E', '🐨', 'コアラ'),
-        kana('い', ['M26 24 Q22 56 30 72 Q35 80 42 68', 'M66 32 Q76 44 78 62'], '#D85A30', '🐕', 'イヌ'),
-        kana('り', ['M36 20 Q32 40 34 58 L42 48', 'M64 16 Q72 40 66 62 Q60 80 40 88'], '#E24B4A', '🍎', 'リンゴ'),
-        kana('て', ['M16 30 Q50 24 82 22 Q56 32 48 50 Q42 72 68 84'], '#1D9E8F', '🐞', 'テントウムシ'),
-        kana('ろ', ['M32 22 L68 22 L28 58 Q50 42 68 52 Q82 62 72 78 Q62 88 38 84'], '#185FA5', '🚀', 'ロケット'),
-      ],
-    ],
+    kana: KANA.map(([ch, word, emoji, say]) =>
+      ({ ch, strokes: KANA_STROKES[ch], color: ROW_COLORS[ROWS.findIndex((r) => r.includes(ch))], emoji, n: 1, say: say ?? `${ch}、${word}の ${ch}` })),
   };
 
   // ドレミの 5 音階。なぞり進むほど高い音が鳴る
@@ -163,7 +163,6 @@ const SLOTS = 5;
   type Pt = { x: number; y: number };
   type Mode = 'num' | 'kana';
   let mode: Mode = 'num';
-  const setNo: Record<Mode, number> = { num: 0, kana: 0 };
   let set: Glyph[] = [];
   let idx = 0;
   /** いまの字の画ごとの点 (1 単位おき) */
@@ -353,10 +352,10 @@ const SLOTS = 5;
     // 1 つずつ出しながら数える
     for (const [i, p] of spots(g.n).entries()) {
       if (my !== gen) return;
-      const t = document.createElementNS(NS, 'text');
-      t.setAttribute('x', String(p.x));
-      t.setAttribute('y', String(p.y));
-      t.setAttribute('font-size', String(p.s));
+      const t = document.createElement('span');
+      t.style.left = `${p.x}cqw`;
+      t.style.top = `${p.y}cqw`;
+      t.style.fontSize = `${p.s}cqw`;
       t.textContent = g.emoji;
       prize.appendChild(t);
       tone(COUNT[i], 0, 0.2, 0.22);
@@ -373,6 +372,7 @@ const SLOTS = 5;
   function end() {
     gen++;
     pad.classList.add('off');
+    prize.innerHTML = '';
     gallery.classList.remove('off');
     gallery.innerHTML = set.map((g, i) =>
       `<svg x="${(i % 3) * 100 + (i >= 3 ? 50 : 0)}" y="${Math.floor(i / 3) * 100}" width="100" height="100" viewBox="-5 -5 110 110" style="animation-delay:${i * 0.15}s">${thumb(g)}</svg>`,
@@ -386,7 +386,9 @@ const SLOTS = 5;
 
   function start(m: Mode) {
     mode = m;
-    set = SETS[m][setNo[m] % SETS[m].length];
+    const all = GLYPHS[m];
+    set = all.map((g) => ({ g, r: Math.random() })).sort((a, b) => a.r - b.r).slice(0, slots.length).map((x) => x.g);
+    if (m === 'num') set.sort((a, b) => all.indexOf(a) - all.indexOf(b));
     modeBtns.forEach((b) => b.classList.toggle('on', b.dataset.mode === m));
     again.classList.add('off');
     gallery.classList.add('off');
@@ -404,7 +406,6 @@ const SLOTS = 5;
   }));
 
   onTap(again, () => {
-    setNo[mode]++;
     tone(660);
     start(mode);
   });
