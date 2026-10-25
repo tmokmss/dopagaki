@@ -29,8 +29,8 @@ if (typeof speechSynthesis !== 'undefined') {
 }
 
 // iOS / iPadOS は、タップ (touchend など) の処理中に一度 speak するまで、読み上げを何も言わずに捨てる。
-// タップは pointerdown で受けるので、最初のタップの読み上げは捨てられる。最初に指を離したとき、
-// 何も読み上げていなければ捨てられた発話 (無ければ無音の発話) を読み直して制限を外す。
+// タップは pointerdown で受けるので、最初のタップの読み上げは捨てられる。発話が始まるまでは、指を離すたびに
+// 捨てられた発話を読み直す。読み上げ中なら二重にならないよう、代わりに無音の発話を speak して制限だけ外す。
 // iPad の Safari は UA が Mac と同じなので、タッチ点の数で見分ける
 const IOS = typeof navigator !== 'undefined'
   && (/iPhone|iPad|iPod/.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1));
@@ -38,21 +38,27 @@ let unlocked = !IOS;
 let dropped: SpeechSynthesisUtterance[] = [];
 const UNLOCK = ['touchend', 'pointerup', 'keydown'];
 function unlock() {
+  const busy = speechSynthesis.speaking || speechSynthesis.pending;
+  const us = !busy && dropped.length ? dropped : [Object.assign(new SpeechSynthesisUtterance(''), { volume: 0 })];
+  dropped = [];
+  for (const u of us) speechSynthesis.speak(u);
+}
+function started() {
   unlocked = true;
   for (const type of UNLOCK) removeEventListener(type, unlock, true);
-  if (speechSynthesis.speaking || speechSynthesis.pending) return;
-  const us = dropped.length ? dropped : [Object.assign(new SpeechSynthesisUtterance(''), { volume: 0 })];
-  for (const u of us) speechSynthesis.speak(u);
 }
 if (IOS && typeof speechSynthesis !== 'undefined') {
   for (const type of UNLOCK) addEventListener(type, unlock, true);
 }
 
-/** 読み上げられそうか。声の一覧がまだ空のときは試してみる */
+/**
+ * 読み上げられそうか。声の一覧がまだ空のときは試してみる。
+ * iPad で、声の一覧に日本語が無いのに lang = 'ja-JP' なら日本語で読み上げる端末があったので、iOS / iPadOS では常に試す
+ */
 export function canSpeak(): boolean {
   if (typeof speechSynthesis === 'undefined') return false;
   const voices = pickVoice();
-  return voices.length === 0 || jaVoice !== null;
+  return IOS || voices.length === 0 || jaVoice !== null;
 }
 
 // 読み上げエンジンは単語に区切って辞書を引くので、ひらがなだけの文は区切りや読み・アクセントを誤りやすい
@@ -86,6 +92,7 @@ function utter(texts: string[]): SpeechSynthesisUtterance | null {
     if (jaVoice) u.voice = jaVoice;
     // pitch をいじると音質が落ちやすいのでそのまま。少しだけゆっくり
     u.rate = 0.9;
+    if (!unlocked) u.addEventListener('start', started);
     speechSynthesis.speak(u);
     return u;
   });
