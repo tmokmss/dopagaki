@@ -352,6 +352,12 @@ const SLOTS = 5;
 
     await sleep(500);
     if (my !== gen) return;
+    // 数えはじめる前に、書いた数字を読む
+    if (mode === 'num') {
+      await speakWait(WORD[g.n - 1]);
+      await sleep(400);
+      if (my !== gen) return;
+    }
     // 1 つずつ出しながら数える。読みを出すときは絵文字を左に寄せる
     const at = spots(g.n);
     if (g.read) at[0].x = 24;
