@@ -61,6 +61,7 @@ const SLOTS = 6;
 
 <script>
   import { tone } from '../lib/audio';
+  import { pickScale } from '../lib/scales';
   import { speak } from '../lib/speech';
   import { onTap } from '../lib/tap';
   import { addStat } from '../lib/stats';
@@ -148,8 +149,8 @@ const SLOTS = 6;
     },
   ];
 
-  // ドレミの 5 音階。なぞり進むほど高い音が鳴る
-  const NOTES = [523, 587, 659, 784, 880, 1047, 1175, 1319, 1568, 1760, 2093, 2349];
+  // なぞり進むほど高い音が鳴る。音階と音色は字ごとに選び直す
+  let sc: ReturnType<typeof pickScale>;
   // 線からどれだけ離れていても「なぞれている」とみなすか・一度にどこまで先へ進めるか (viewBox の単位)
   const TOL = 14;
   const AHEAD = 16;
@@ -195,6 +196,7 @@ const SLOTS = 6;
     prog = 0;
     note = -1;
     busy = false;
+    sc = pickScale();
     msg.textContent = '';
     moveHead();
   }
@@ -233,10 +235,10 @@ const SLOTS = 6;
     if (best === prog) return;
     prog = best;
     moveHead();
-    const n = Math.floor((prog / (pts.length - 1)) * (NOTES.length - 1));
+    const n = Math.floor((prog / (pts.length - 1)) * (sc.notes.length - 1));
     if (n > note) {
       note = n;
-      tone(NOTES[n], 0, 0.18, 0.2);
+      sc.play(n);
     }
     if (prog >= pts.length - 3) finish();
   }
@@ -308,7 +310,7 @@ const SLOTS = 6;
     gallery.innerHTML = SHAPES.map((s, i) =>
       `<svg x="${(i % 3) * 100}" y="${Math.floor(i / 3) * 100}" width="100" height="100" viewBox="-5 -5 110 110" style="animation-delay:${i * 0.15}s">${thumb(s)}</svg>`,
     ).join('');
-    SHAPES.forEach((_, i) => tone(NOTES[i * 2], i * 0.15, 0.2, 0.2));
+    SHAPES.forEach((_, i) => sc.play(i * 2, i * 0.15));
     msg.textContent = '';
     again.classList.remove('off');
     addStat('done');

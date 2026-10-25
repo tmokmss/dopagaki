@@ -73,6 +73,7 @@ const SLOTS = 5;
 
 <script>
   import { tone } from '../lib/audio';
+  import { pickScale } from '../lib/scales';
   import { speak, speakWait } from '../lib/speech';
   import { onTap } from '../lib/tap';
   import { addStat } from '../lib/stats';
@@ -140,8 +141,8 @@ const SLOTS = 5;
       .sort((a, b) => EASY.indexOf(a.ch) - EASY.indexOf(b.ch)),
   };
 
-  // ドレミの 5 音階。なぞり進むほど高い音が鳴る
-  const NOTES = [523, 587, 659, 784, 880, 1047, 1175, 1319, 1568, 1760, 2093, 2349];
+  // なぞり進むほど高い音が鳴る。音階と音色は字ごとに選び直す
+  let sc: ReturnType<typeof pickScale>;
   // 数えるときの音。1 つ出るごとに上がる
   const COUNT = [523, 587, 659, 784, 880, 1047, 1175, 1319, 1568, 1760];
   const WORD = ['イチ', 'ニ', 'サン', 'ヨン', 'ゴ', 'ロク', 'ナナ', 'ハチ', 'キュウ', 'ジュウ'];
@@ -210,6 +211,7 @@ const SLOTS = 5;
     [dots, goal, head, ghost].forEach((el) => el.removeAttribute('visibility'));
     busy = false;
     note = -1;
+    sc = pickScale();
     msg.textContent = '';
     startStroke(0);
   }
@@ -260,10 +262,10 @@ const SLOTS = 5;
     if (best === prog) return;
     prog = best;
     moveHead();
-    const n = Math.floor(((before + prog) / total) * (NOTES.length - 1));
+    const n = Math.floor(((before + prog) / total) * (sc.notes.length - 1));
     if (n > note) {
       note = n;
-      tone(NOTES[n], 0, 0.18, 0.2);
+      sc.play(n);
     }
     if (prog >= s.length - 3) endStroke();
   }
@@ -405,7 +407,7 @@ const SLOTS = 5;
     gallery.innerHTML = set.map((g, i) =>
       `<svg x="${(i % 3) * 100 + (i >= 3 ? 50 : 0)}" y="${Math.floor(i / 3) * 100}" width="100" height="100" viewBox="-5 -5 110 110" style="animation-delay:${i * 0.15}s">${thumb(g)}</svg>`,
     ).join('');
-    set.forEach((_, i) => tone(NOTES[i * 2], i * 0.15, 0.2, 0.2));
+    set.forEach((_, i) => sc.play(i * 2, i * 0.15));
     msg.textContent = '';
     again.classList.remove('off');
     addStat('done');
