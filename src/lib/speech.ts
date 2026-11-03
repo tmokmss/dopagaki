@@ -32,9 +32,11 @@ if (typeof speechSynthesis !== 'undefined') {
 // タップは pointerdown で受けるので、最初のタップの読み上げは捨てられる。発話が始まるまでは、指を離すたびに
 // 捨てられた発話を読み直す。読み上げ中なら二重にならないよう、代わりに無音の発話を speak して制限だけ外す。
 // iPad の Safari は UA が Mac と同じなので、タッチ点の数で見分ける
+// Android の Chrome も、ページを開いてから指を一度離すまでは not-allowed で捨てる (touch の pointerdown はユーザー操作に数えない)。
+// トップから移動してきたときは許可されるので、捨てられたときだけ同じように読み直す
 const IOS = typeof navigator !== 'undefined'
   && (/iPhone|iPad|iPod/.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1));
-let unlocked = !IOS;
+let unlocked = true;
 let dropped: SpeechSynthesisUtterance[] = [];
 const UNLOCK = ['touchend', 'pointerup', 'keydown'];
 function unlock() {
@@ -42,14 +44,17 @@ function unlock() {
   const us = !busy && dropped.length ? dropped : [Object.assign(new SpeechSynthesisUtterance(''), { volume: 0 })];
   dropped = [];
   for (const u of us) speechSynthesis.speak(u);
+  if (!IOS) started();
 }
 function started() {
   unlocked = true;
   for (const type of UNLOCK) removeEventListener(type, unlock, true);
 }
-if (IOS && typeof speechSynthesis !== 'undefined') {
+function lock() {
+  unlocked = false;
   for (const type of UNLOCK) addEventListener(type, unlock, true);
 }
+if (IOS && typeof speechSynthesis !== 'undefined') lock();
 
 /**
  * 読み上げられそうか。声の一覧がまだ空のときは試してみる。
@@ -92,7 +97,12 @@ function utter(texts: string[]): SpeechSynthesisUtterance | null {
     if (jaVoice) u.voice = jaVoice;
     // pitch をいじると音質が落ちやすいのでそのまま。少しだけゆっくり
     u.rate = 0.9;
-    if (!unlocked) u.addEventListener('start', started);
+    u.addEventListener('start', started);
+    u.addEventListener('error', (e) => {
+      if (e.error !== 'not-allowed') return;
+      lock();
+      if (!dropped.includes(u)) dropped.push(u);
+    });
     speechSynthesis.speak(u);
     return u;
   });
@@ -110,19 +120,25 @@ export function speak(...texts: string[]): boolean {
   return utter(texts) !== null;
 }
 
-/** speak と同じだが、読み終わったら解決する。読み上げられないときは false で解決する */
+/**
+ * speak と同じだが、読み終わったら解決する。読み上げられないときは false で解決する。
+ * 声が端末に無くオフラインのときなどは、声の一覧に日本語があっても synthesis-failed になる
+ */
 export function speakWait(...texts: string[]): Promise<boolean> {
   return new Promise((resolve) => {
     const u = utter(texts);
     if (!u) return resolve(false);
     let timer = 0;
-    const fin = () => {
+    const fin = (ok = true) => {
       clearTimeout(timer);
-      resolve(true);
+      resolve(ok);
     };
-    u.onend = fin;
-    u.onerror = fin;
+    u.onend = () => fin();
+    u.onerror = (e) => {
+      // not-allowed は指を離したときに読み直すので、その end を待つ
+      if (e.error !== 'not-allowed') fin(e.error === 'interrupted' || e.error === 'canceled');
+    };
     // onend が来ない端末があるので、長さの目安で打ち切る
-    timer = window.setTimeout(fin, 1500 + texts.join('').length * 300);
+    timer = window.setTimeout(() => fin(), 1500 + texts.join('').length * 300);
   });
 }
